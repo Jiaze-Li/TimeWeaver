@@ -1222,50 +1222,122 @@ struct ContentView: View {
     }
 
     private var primaryActionsPane: some View {
-        GroupBox("Actions") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Use these buttons as the main workflow.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
+        GroupBox("Quick Actions") {
+            VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button("New Source") {
-                        model.newSource()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Manage Sources")
+                        .font(.subheadline.weight(.semibold))
+                    ViewThatFits(in: .vertical) {
+                        HStack(spacing: 10) {
+                            Button {
+                                model.newSource()
+                            } label: {
+                                Label("New", systemImage: "plus")
+                            }
+                            .buttonStyle(.bordered)
 
-                    Button("Save Source") {
-                        model.saveCurrentSource()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                model.saveCurrentSource()
+                            } label: {
+                                Label("Save", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.bordered)
 
-                    Button("Remove Source") {
-                        model.removeSelectedSource()
+                            Button(role: .destructive) {
+                                model.removeSelectedSource()
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.selectedSourceID == nil)
+
+                            Spacer(minLength: 0)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                model.newSource()
+                            } label: {
+                                Label("New", systemImage: "plus")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button {
+                                model.saveCurrentSource()
+                            } label: {
+                                Label("Save", systemImage: "square.and.arrow.down")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(role: .destructive) {
+                                model.removeSelectedSource()
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.selectedSourceID == nil)
+                        }
                     }
-                    .disabled(model.selectedSourceID == nil)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Button("Preview Matching Reservations") {
-                        model.previewAll()
-                    }
-                    .disabled(model.isBusy)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Run Sync")
+                        .font(.subheadline.weight(.semibold))
+                    ViewThatFits(in: .vertical) {
+                        HStack(spacing: 10) {
+                            Button {
+                                model.previewAll()
+                            } label: {
+                                Label("Preview", systemImage: "eye")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.isBusy)
 
-                    Button("Sync Enabled Sources") {
-                        model.syncAll()
-                    }
-                    .disabled(model.isBusy)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                            Button {
+                                model.syncAll()
+                            } label: {
+                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.isBusy)
 
-                    Button("Open Calendar") {
-                        model.openCalendarApp()
+                            Button {
+                                model.openCalendarApp()
+                            } label: {
+                                Label("Calendar", systemImage: "calendar")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Spacer(minLength: 0)
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button {
+                                model.previewAll()
+                            } label: {
+                                Label("Preview", systemImage: "eye")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(model.isBusy)
+
+                            Button {
+                                model.syncAll()
+                            } label: {
+                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(model.isBusy)
+
+                            Button {
+                                model.openCalendarApp()
+                            } label: {
+                                Label("Calendar", systemImage: "calendar")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
