@@ -1407,69 +1407,83 @@ struct ContentView: View {
 
     @ViewBuilder
     private var editorPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            GroupBox("Source Details") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Enabled", isOn: $model.draftEnabled)
-                        .toggleStyle(.checkbox)
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Source Details")
+                    .font(.headline)
 
-                    Text("Sheet Link")
-                    TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
-                        .textFieldStyle(.roundedBorder)
+                Toggle("Enabled", isOn: $model.draftEnabled)
+                    .toggleStyle(.checkbox)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        bookingFields
-                    }
+                Text("Sheet Link")
+                TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
+                    .textFieldStyle(.roundedBorder)
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("Calendar")
-                            Picker("", selection: $model.draftCalendar) {
-                                ForEach(model.calendars, id: \.self) { calendar in
-                                    Text(calendar).tag(calendar)
-                                }
+                VStack(alignment: .leading, spacing: 8) {
+                    bookingFields
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Calendar")
+                        Picker("", selection: $model.draftCalendar) {
+                            ForEach(model.calendars, id: \.self) { calendar in
+                                Text(calendar).tag(calendar)
                             }
-                            .labelsHidden()
                         }
-                        Button("Refresh Calendars") {
-                            model.refreshCalendars()
-                        }
+                        .labelsHidden()
+                    }
+                    Button("Refresh Calendars") {
+                        model.refreshCalendars()
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(NSColor.controlBackgroundColor))
+            )
 
             slotTimesPane
 
-            GroupBox("Automation") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
-                        .onChange(of: model.upcomingOnly) { _ in
-                            model.automationChanged()
-                        }
-                    Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
-                        .onChange(of: model.autoSyncEnabled) { _ in
-                            model.automationChanged()
-                        }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Interval (minutes)")
-                        TextField("15", text: $model.autoSyncMinutes)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .onSubmit {
-                                model.automationChanged()
-                            }
-                            .onChange(of: model.autoSyncMinutes) { _ in
-                                model.automationChanged()
-                            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Automation")
+                    .font(.headline)
+
+                Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
+                    .onChange(of: model.upcomingOnly) { _ in
+                        model.automationChanged()
                     }
-                    Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
+                    .onChange(of: model.autoSyncEnabled) { _ in
+                        model.automationChanged()
+                    }
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Interval (minutes)")
+                    TextField("15", text: $model.autoSyncMinutes)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .onSubmit {
+                            model.automationChanged()
+                        }
+                        .onChange(of: model.autoSyncMinutes) { _ in
+                            model.automationChanged()
+                        }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(NSColor.controlBackgroundColor))
+            )
         }
     }
 
