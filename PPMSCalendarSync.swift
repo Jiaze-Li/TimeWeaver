@@ -1122,9 +1122,9 @@ struct SlotRuleEditor: View {
                     .fixedSize()
                 Spacer(minLength: 0)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 TextField("Sheet label", text: $rule.sheetLabel)
                     .textFieldStyle(.roundedBorder)
                 HStack(spacing: 8) {
@@ -1489,7 +1489,7 @@ struct ContentView: View {
     }
 
     private var slotTimesPane: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .center, spacing: 8) {
                 Text("Slot Times")
                     .font(.headline)
@@ -1527,6 +1527,8 @@ struct ContentView: View {
                 Spacer(minLength: 0)
             }
             .font(.caption)
+            .padding(.top, 1)
+            .padding(.bottom, 1)
 
             ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
                 SlotRuleEditor(rule: $model.slotRules[index])
@@ -1539,9 +1541,11 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 10)
                 .fill(Color(NSColor.controlBackgroundColor))
