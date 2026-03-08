@@ -1107,16 +1107,16 @@ struct SlotRuleEditor: View {
             HStack(alignment: .center, spacing: 10) {
                 TextField("Sheet label", text: $rule.sheetLabel)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 150, maxWidth: 220)
+                    .frame(minWidth: 140, maxWidth: 200)
                 TextField("08:30", text: $rule.start)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 84)
+                    .frame(width: 78)
                 Image(systemName: "arrow.right")
                     .foregroundStyle(.secondary)
                     .frame(width: 18)
                 TextField("13:00", text: $rule.end)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 84)
+                    .frame(width: 78)
                 Toggle("Next day", isOn: $rule.endsNextDay)
                     .toggleStyle(.checkbox)
                     .fixedSize()
@@ -1439,42 +1439,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            GroupBox(label: slotTimesHeader) {
-                VStack(alignment: .leading, spacing: 8) {
-                    ViewThatFits(in: .vertical) {
-                        HStack(alignment: .center, spacing: 10) {
-                            Text("Label")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 180, alignment: .leading)
-                            Text("Start")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 84, alignment: .leading)
-                            Text("End")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 102, alignment: .leading)
-                            Text("Carry")
-                                .foregroundStyle(.secondary)
-                                .frame(width: 90, alignment: .leading)
-                            Spacer(minLength: 0)
-                        }
-                        .font(.caption)
-
-                        EmptyView()
-                    }
-
-                    ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
-                        SlotRuleEditor(rule: $model.slotRules[index])
-                            .onChange(of: model.slotRules[index]) { _ in
-                                model.persistRules()
-                            }
-                    }
-                    Text("Use 24-hour format, for example 08:30 or 18:00.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            slotTimesPane
 
             GroupBox("Automation") {
                 VStack(alignment: .leading, spacing: 10) {
@@ -1523,16 +1488,16 @@ struct ContentView: View {
         }
     }
 
-    private var slotTimesHeader: some View {
-        ViewThatFits(in: .vertical) {
-            HStack(alignment: .center, spacing: 10) {
+    private var slotTimesPane: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
                 Text("Slot Times")
                     .font(.headline)
                 Spacer(minLength: 8)
                 Button {
                     model.addSlotRule()
                 } label: {
-                    Label("Add Rule", systemImage: "plus")
+                    Label("Add", systemImage: "plus")
                 }
                 .buttonStyle(.bordered)
 
@@ -1540,32 +1505,47 @@ struct ContentView: View {
                     Button(role: .destructive) {
                         model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
                     } label: {
-                        Label("Remove Last", systemImage: "minus")
+                        Label("Remove", systemImage: "minus")
                     }
                     .buttonStyle(.bordered)
                 }
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Slot Times")
-                    .font(.headline)
-                Button {
-                    model.addSlotRule()
-                } label: {
-                    Label("Add Rule", systemImage: "plus")
-                }
-                .buttonStyle(.bordered)
-
-                if !model.slotRules.isEmpty {
-                    Button(role: .destructive) {
-                        model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
-                    } label: {
-                        Label("Remove Last", systemImage: "minus")
-                    }
-                    .buttonStyle(.bordered)
-                }
+            HStack(alignment: .center, spacing: 10) {
+                Text("Label")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 180, alignment: .leading)
+                Text("Start")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 84, alignment: .leading)
+                Text("End")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 96, alignment: .leading)
+                Text("Carry")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 80, alignment: .leading)
+                Spacer(minLength: 0)
             }
+            .font(.caption)
+
+            ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
+                SlotRuleEditor(rule: $model.slotRules[index])
+                    .onChange(of: model.slotRules[index]) { _ in
+                        model.persistRules()
+                    }
+            }
+
+            Text("Use 24-hour format, for example 08:30 or 18:00.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
     }
 }
 
