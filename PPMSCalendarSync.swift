@@ -1103,20 +1103,37 @@ struct SlotRuleEditor: View {
     @Binding var rule: SlotRule
 
     var body: some View {
-        HStack {
-            TextField("Sheet label", text: $rule.sheetLabel)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 180)
-            TextField("08:30", text: $rule.start)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-            Text("to")
-            TextField("13:00", text: $rule.end)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 80)
-            Toggle("Next day", isOn: $rule.endsNextDay)
-                .toggleStyle(.checkbox)
-                .frame(width: 100)
+        ViewThatFits(in: .vertical) {
+            HStack(alignment: .center, spacing: 10) {
+                TextField("Sheet label", text: $rule.sheetLabel)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 140, maxWidth: 220)
+                TextField("08:30", text: $rule.start)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                Text("to")
+                    .foregroundStyle(.secondary)
+                TextField("13:00", text: $rule.end)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 90)
+                Toggle("Next day", isOn: $rule.endsNextDay)
+                    .toggleStyle(.checkbox)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Sheet label", text: $rule.sheetLabel)
+                    .textFieldStyle(.roundedBorder)
+                HStack(spacing: 10) {
+                    TextField("08:30", text: $rule.start)
+                        .textFieldStyle(.roundedBorder)
+                    Text("to")
+                        .foregroundStyle(.secondary)
+                    TextField("13:00", text: $rule.end)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Toggle("Next day", isOn: $rule.endsNextDay)
+                    .toggleStyle(.checkbox)
+            }
         }
     }
 }
@@ -1147,194 +1164,318 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
 
     var body: some View {
-        VStack(spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("PPMS Calendar Sync")
-                        .font(.title2.weight(.semibold))
-                    Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("Open Calendar") {
-                    model.openCalendarApp()
-                }
-            }
+        GeometryReader { proxy in
+            let compact = proxy.size.width < 1160
 
-            HStack(spacing: 12) {
-                SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
-                SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
-                SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
-            }
-
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Sources")
-                        .font(.headline)
-                    List(selection: $model.selectedSourceID) {
-                        ForEach(model.sources) { item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                HStack {
-                                    Image(systemName: item.enabled ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(item.enabled ? .green : .secondary)
-                                    Text(item.name)
-                                }
-                                Text("\(item.bookingID) -> \(item.calendar)")
-                                    .font(.caption)
+            ScrollView {
+                VStack(spacing: 14) {
+                    ViewThatFits(in: .vertical) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("PPMS Calendar Sync")
+                                    .font(.title2.weight(.semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.85)
+                                Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
                                     .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-                            .tag(item.id)
+                            Spacer(minLength: 12)
+                            Button("Open Calendar") {
+                                model.openCalendarApp()
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("PPMS Calendar Sync")
+                                    .font(.title2.weight(.semibold))
+                                Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Button("Open Calendar") {
+                                model.openCalendarApp()
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: compact ? 150 : 180), spacing: 12)], spacing: 12) {
+                        SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
+                        SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
+                        SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
+                    }
+
+                    if compact {
+                        VStack(alignment: .leading, spacing: 16) {
+                            sourcesPane
+                            editorPane(compact: true)
+                        }
+                    } else {
+                        HStack(alignment: .top, spacing: 16) {
+                            sourcesPane
+                                .frame(width: 300)
+                            editorPane(compact: false)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
                     }
-                    .onChange(of: model.selectedSourceID) { value in
-                        if let value, let item = model.sources.first(where: { $0.id == value }) {
-                            model.selectSource(item)
-                        }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Output")
+                            .font(.headline)
+                        TextEditor(text: $model.output)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 220)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                            )
                     }
 
                     HStack {
-                        Button("New") { model.newSource() }
-                        Button("Save Source") { model.saveCurrentSource() }
-                        Button("Remove") { model.removeSelectedSource() }
+                        Text(model.status)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer()
+                        if model.isBusy {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                     }
                 }
-                .frame(minWidth: 290, maxHeight: .infinity)
+                .padding(16)
+            }
+        }
+        .frame(minWidth: 760, minHeight: 760)
+    }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    GroupBox("Source Details") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Toggle("Enabled", isOn: $model.draftEnabled)
-                                .toggleStyle(.checkbox)
-
-                            Text("Sheet Link")
-                            TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
-                                .textFieldStyle(.roundedBorder)
-
-                            HStack {
-                                VStack(alignment: .leading) {
-                                    Text("Booking ID")
-                                    TextField("LJZ", text: $model.draftBookingID)
-                                        .textFieldStyle(.roundedBorder)
-                                }
-                                VStack(alignment: .leading) {
-                                    Text("Event Title")
-                                    TextField("ppms", text: $model.draftName)
-                                        .textFieldStyle(.roundedBorder)
-                                }
-                            }
-
-                            HStack {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text("Calendar")
-                                    Picker("", selection: $model.draftCalendar) {
-                                        ForEach(model.calendars, id: \.self) { calendar in
-                                            Text(calendar).tag(calendar)
-                                        }
-                                    }
-                                    .labelsHidden()
-                                }
-                                Spacer()
-                                Button("Refresh Calendars") {
-                                    model.refreshCalendars()
-                                }
-                            }
+    private var sourcesPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Sources")
+                .font(.headline)
+            List(selection: $model.selectedSourceID) {
+                ForEach(model.sources) { item in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Image(systemName: item.enabled ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(item.enabled ? .green : .secondary)
+                            Text(item.name)
+                                .lineLimit(1)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Text("\(item.bookingID) -> \(item.calendar)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-
-                    GroupBox("Slot Times") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
-                                SlotRuleEditor(rule: $model.slotRules[index])
-                                    .onChange(of: model.slotRules[index]) { _ in
-                                        model.persistRules()
-                                    }
-                            }
-                            HStack {
-                                Button("Add Slot Rule") {
-                                    model.addSlotRule()
-                                }
-                                if !model.slotRules.isEmpty {
-                                    Button("Remove Last Rule") {
-                                        model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
-                                    }
-                                }
-                            }
-                            Text("Use 24-hour format, for example 08:30 or 18:00.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    GroupBox("Automation") {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
-                                .onChange(of: model.upcomingOnly) { _ in
-                                    model.automationChanged()
-                                }
-                            Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
-                                .onChange(of: model.autoSyncEnabled) { _ in
-                                    model.automationChanged()
-                                }
-                            HStack {
-                                Text("Interval (minutes)")
-                                TextField("15", text: $model.autoSyncMinutes)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 80)
-                                    .onSubmit {
-                                        model.automationChanged()
-                                    }
-                                    .onChange(of: model.autoSyncMinutes) { _ in
-                                        model.automationChanged()
-                                    }
-                            }
-                            Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    HStack {
-                        Button("Preview") {
-                            model.previewAll()
-                        }
-                        .disabled(model.isBusy)
-                        Button("Sync Enabled Sources") {
-                            model.syncAll()
-                        }
-                        .disabled(model.isBusy)
-                    }
+                    .tag(item.id)
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxHeight: 430)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Output")
-                    .font(.headline)
-                TextEditor(text: $model.output)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(minHeight: 220)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                    )
+            .frame(minHeight: 220)
+            .onChange(of: model.selectedSourceID) { value in
+                if let value, let item = model.sources.first(where: { $0.id == value }) {
+                    model.selectSource(item)
+                }
             }
 
-            HStack {
-                Text(model.status)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                if model.isBusy {
-                    ProgressView()
-                        .controlSize(.small)
+            ViewThatFits(in: .vertical) {
+                HStack {
+                    Button("New") { model.newSource() }
+                    Button("Save Source") { model.saveCurrentSource() }
+                    Button("Remove") { model.removeSelectedSource() }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("New") { model.newSource() }
+                    Button("Save Source") { model.saveCurrentSource() }
+                    Button("Remove") { model.removeSelectedSource() }
                 }
             }
         }
-        .padding(16)
-        .frame(minWidth: 980, minHeight: 760)
+    }
+
+    @ViewBuilder
+    private func editorPane(compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GroupBox("Source Details") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Enabled", isOn: $model.draftEnabled)
+                        .toggleStyle(.checkbox)
+
+                    Text("Sheet Link")
+                    TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
+                        .textFieldStyle(.roundedBorder)
+
+                    if compact {
+                        VStack(alignment: .leading, spacing: 10) {
+                            bookingFields
+                        }
+                    } else {
+                        HStack(alignment: .top, spacing: 12) {
+                            bookingFields
+                        }
+                    }
+
+                    ViewThatFits(in: .vertical) {
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Calendar")
+                                Picker("", selection: $model.draftCalendar) {
+                                    ForEach(model.calendars, id: \.self) { calendar in
+                                        Text(calendar).tag(calendar)
+                                    }
+                                }
+                                .labelsHidden()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            Spacer(minLength: 12)
+                            Button("Refresh Calendars") {
+                                model.refreshCalendars()
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Calendar")
+                                Picker("", selection: $model.draftCalendar) {
+                                    ForEach(model.calendars, id: \.self) { calendar in
+                                        Text(calendar).tag(calendar)
+                                    }
+                                }
+                                .labelsHidden()
+                            }
+                            Button("Refresh Calendars") {
+                                model.refreshCalendars()
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("Slot Times") {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
+                        SlotRuleEditor(rule: $model.slotRules[index])
+                            .onChange(of: model.slotRules[index]) { _ in
+                                model.persistRules()
+                            }
+                    }
+                    ViewThatFits(in: .vertical) {
+                        HStack {
+                            Button("Add Slot Rule") {
+                                model.addSlotRule()
+                            }
+                            if !model.slotRules.isEmpty {
+                                Button("Remove Last Rule") {
+                                    model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
+                                }
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Button("Add Slot Rule") {
+                                model.addSlotRule()
+                            }
+                            if !model.slotRules.isEmpty {
+                                Button("Remove Last Rule") {
+                                    model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
+                                }
+                            }
+                        }
+                    }
+                    Text("Use 24-hour format, for example 08:30 or 18:00.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            GroupBox("Automation") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
+                        .onChange(of: model.upcomingOnly) { _ in
+                            model.automationChanged()
+                        }
+                    Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
+                        .onChange(of: model.autoSyncEnabled) { _ in
+                            model.automationChanged()
+                        }
+                    ViewThatFits(in: .vertical) {
+                        HStack {
+                            Text("Interval (minutes)")
+                            TextField("15", text: $model.autoSyncMinutes)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 80)
+                                .onSubmit {
+                                    model.automationChanged()
+                                }
+                                .onChange(of: model.autoSyncMinutes) { _ in
+                                    model.automationChanged()
+                                }
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Interval (minutes)")
+                            TextField("15", text: $model.autoSyncMinutes)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 120)
+                                .onSubmit {
+                                    model.automationChanged()
+                                }
+                                .onChange(of: model.autoSyncMinutes) { _ in
+                                    model.automationChanged()
+                                }
+                        }
+                    }
+                    Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            ViewThatFits(in: .vertical) {
+                HStack {
+                    Button("Preview") {
+                        model.previewAll()
+                    }
+                    .disabled(model.isBusy)
+                    Button("Sync Enabled Sources") {
+                        model.syncAll()
+                    }
+                    .disabled(model.isBusy)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Preview") {
+                        model.previewAll()
+                    }
+                    .disabled(model.isBusy)
+                    Button("Sync Enabled Sources") {
+                        model.syncAll()
+                    }
+                    .disabled(model.isBusy)
+                }
+            }
+        }
+    }
+
+    private var bookingFields: some View {
+        Group {
+            VStack(alignment: .leading) {
+                Text("Booking ID")
+                TextField("LJZ", text: $model.draftBookingID)
+                    .textFieldStyle(.roundedBorder)
+            }
+            VStack(alignment: .leading) {
+                Text("Event Title")
+                TextField("ppms", text: $model.draftName)
+                    .textFieldStyle(.roundedBorder)
+            }
+        }
     }
 }
 
