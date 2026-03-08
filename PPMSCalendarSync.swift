@@ -1169,45 +1169,40 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
 
     var body: some View {
-        GeometryReader { proxy in
-            let useSidebarLayout = proxy.size.width >= 720
+        VStack(alignment: .leading, spacing: 14) {
+            headerPane
+            primaryActionsPane
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    headerPane
-                    primaryActionsPane
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
-                        SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
-                        SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
-                        SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
-                    }
-
-                    if useSidebarLayout {
-                        HStack(alignment: .top, spacing: 16) {
-                            sourcesPane
-                                .frame(width: 210)
-                            VStack(alignment: .leading, spacing: 14) {
-                                editorPane
-                                outputPane
-                                statusPane
-                            }
-                            .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-                    } else {
-                        sourcesPane
-                        editorPane
-                        outputPane
-                        statusPane
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 24)
-                .padding(.bottom, 16)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+                SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
+                SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
+                SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
             }
+
+            HStack(alignment: .top, spacing: 16) {
+                sourcesPane
+                    .frame(width: 210, alignment: .topLeading)
+
+                ScrollView {
+                    detailColumn
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .frame(minWidth: 420, minHeight: 760)
+        .padding(.horizontal, 16)
+        .padding(.top, 24)
+        .padding(.bottom, 16)
+        .frame(minWidth: 980, minHeight: 760)
+    }
+
+    fileprivate var detailColumn: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            editorPane
+            outputPane
+            statusPane
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var headerPane: some View {
@@ -1227,139 +1222,129 @@ struct ContentView: View {
     }
 
     private var primaryActionsPane: some View {
-        GroupBox("Quick Actions") {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Manage Sources")
-                        .font(.subheadline.weight(.semibold))
-                    ViewThatFits(in: .vertical) {
-                        HStack(spacing: 10) {
-                            Button {
-                                model.newSource()
-                            } label: {
-                                Label("New", systemImage: "plus")
-                            }
-                            .buttonStyle(.bordered)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Quick Actions")
+                .font(.headline)
 
-                            Button {
-                                model.saveCurrentSource()
-                            } label: {
-                                Label("Save", systemImage: "square.and.arrow.down")
-                            }
-                            .buttonStyle(.bordered)
+            HStack(alignment: .top, spacing: 16) {
+                manageSourcesPane
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
 
-                            Button(role: .destructive) {
-                                model.removeSelectedSource()
-                            } label: {
-                                Label("Remove", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.selectedSourceID == nil)
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(width: 1)
 
-                            Spacer(minLength: 0)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                model.newSource()
-                            } label: {
-                                Label("New", systemImage: "plus")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button {
-                                model.saveCurrentSource()
-                            } label: {
-                                Label("Save", systemImage: "square.and.arrow.down")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Button(role: .destructive) {
-                                model.removeSelectedSource()
-                            } label: {
-                                Label("Remove", systemImage: "trash")
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.selectedSourceID == nil)
-                        }
-                    }
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Run Sync")
-                        .font(.subheadline.weight(.semibold))
-                    ViewThatFits(in: .vertical) {
-                        HStack(spacing: 10) {
-                            Button {
-                                model.previewAll()
-                            } label: {
-                                Label("Preview", systemImage: "eye")
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isBusy)
-
-                            Button {
-                                model.syncAll()
-                            } label: {
-                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.isBusy)
-
-                            Button {
-                                model.openCalendarApp()
-                            } label: {
-                                Label("Calendar", systemImage: "calendar")
-                            }
-                            .buttonStyle(.bordered)
-
-                            Spacer(minLength: 0)
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Button {
-                                model.previewAll()
-                            } label: {
-                                Label("Preview", systemImage: "eye")
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(model.isBusy)
-
-                            Button {
-                                model.syncAll()
-                            } label: {
-                                Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.isBusy)
-
-                            Button {
-                                model.openCalendarApp()
-                            } label: {
-                                Label("Calendar", systemImage: "calendar")
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                    }
-                }
+                runSyncPane
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var manageSourcesPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Manage Sources")
+                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 10) {
+                newSourceButton
+                saveSourceButton
+                removeSourceButton
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var runSyncPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Run Sync")
+                .font(.subheadline.weight(.semibold))
+            HStack(spacing: 10) {
+                previewButton
+                syncButton
+                openCalendarButton
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var newSourceButton: some View {
+        Button {
+            model.newSource()
+        } label: {
+            Label("New", systemImage: "plus")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var saveSourceButton: some View {
+        Button {
+            model.saveCurrentSource()
+        } label: {
+            Label("Save", systemImage: "square.and.arrow.down")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var removeSourceButton: some View {
+        Button(role: .destructive) {
+            model.removeSelectedSource()
+        } label: {
+            Label("Remove", systemImage: "trash")
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.selectedSourceID == nil)
+    }
+
+    private var previewButton: some View {
+        Button {
+            model.previewAll()
+        } label: {
+            Label("Preview", systemImage: "eye")
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.isBusy)
+    }
+
+    private var syncButton: some View {
+        Button {
+            model.syncAll()
+        } label: {
+            Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(model.isBusy)
+    }
+
+    private var openCalendarButton: some View {
+        Button {
+            model.openCalendarApp()
+        } label: {
+            Label("Calendar", systemImage: "calendar")
+        }
+        .buttonStyle(.bordered)
     }
 
     private var outputPane: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Output")
                 .font(.headline)
-            TextEditor(text: $model.output)
+            Text(model.output.isEmpty ? "No output yet." : model.output)
                 .font(.system(.body, design: .monospaced))
-                .frame(minHeight: 220)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                )
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+                .padding(10)
+            .background(Color(NSColor.textBackgroundColor))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+            )
         }
     }
 
@@ -1407,83 +1392,10 @@ struct ContentView: View {
 
     @ViewBuilder
     private var editorPane: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Source Details")
-                    .font(.headline)
-
-                Toggle("Enabled", isOn: $model.draftEnabled)
-                    .toggleStyle(.checkbox)
-
-                Text("Sheet Link")
-                TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
-                    .textFieldStyle(.roundedBorder)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    bookingFields
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Calendar")
-                        Picker("", selection: $model.draftCalendar) {
-                            ForEach(model.calendars, id: \.self) { calendar in
-                                Text(calendar).tag(calendar)
-                            }
-                        }
-                        .labelsHidden()
-                    }
-                    Button("Refresh Calendars") {
-                        model.refreshCalendars()
-                    }
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(NSColor.controlBackgroundColor))
-            )
-
+        VStack(alignment: .leading, spacing: 12) {
+            sourceDetailsPane
             slotTimesPane
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Automation")
-                    .font(.headline)
-
-                Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
-                    .onChange(of: model.upcomingOnly) { _ in
-                        model.automationChanged()
-                    }
-                Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
-                    .onChange(of: model.autoSyncEnabled) { _ in
-                        model.automationChanged()
-                    }
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Interval (minutes)")
-                    TextField("15", text: $model.autoSyncMinutes)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 120)
-                        .onSubmit {
-                            model.automationChanged()
-                        }
-                        .onChange(of: model.autoSyncMinutes) { _ in
-                            model.automationChanged()
-                        }
-                }
-                Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(NSColor.controlBackgroundColor))
-            )
+            automationPane
         }
     }
 
@@ -1565,12 +1477,144 @@ struct ContentView: View {
                 .fill(Color(NSColor.controlBackgroundColor))
         )
     }
+
+    private var sourceDetailsPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Source Details")
+                .font(.headline)
+
+            Toggle("Enabled", isOn: $model.draftEnabled)
+                .toggleStyle(.checkbox)
+
+            Text("Sheet Link")
+            TextField("Google Sheets link or local .xlsx path", text: $model.draftSource)
+                .textFieldStyle(.roundedBorder)
+
+            VStack(alignment: .leading, spacing: 8) {
+                bookingFields
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Calendar")
+                    Picker("", selection: $model.draftCalendar) {
+                        ForEach(model.calendars, id: \.self) { calendar in
+                            Text(calendar).tag(calendar)
+                        }
+                    }
+                    .labelsHidden()
+                }
+                Button("Refresh Calendars") {
+                    model.refreshCalendars()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
+
+    private var automationPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Automation")
+                .font(.headline)
+
+            Toggle("Only upcoming reservations", isOn: $model.upcomingOnly)
+                .onChange(of: model.upcomingOnly) { _ in
+                    model.automationChanged()
+                }
+            Toggle("Auto sync while the app is open", isOn: $model.autoSyncEnabled)
+                .onChange(of: model.autoSyncEnabled) { _ in
+                    model.automationChanged()
+                }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Interval (minutes)")
+                TextField("15", text: $model.autoSyncMinutes)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 120)
+                    .onSubmit {
+                        model.automationChanged()
+                    }
+                    .onChange(of: model.autoSyncMinutes) { _ in
+                        model.automationChanged()
+                    }
+            }
+            Text("The app polls saved sources and only adds or updates matching bookings. Removed bookings are shown as manual delete candidates.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+    }
 }
 
 #if PPMS_TEST_RUNNER
+import AppKit
+
+@MainActor
+private func writeSnapshot(to outputURL: URL, width: CGFloat, height: CGFloat) throws {
+    let detailsOnly = ProcessInfo.processInfo.environment["PPMS_SNAPSHOT_DETAILS_ONLY"] == "1"
+    let content = Group {
+        if detailsOnly {
+            ContentView()
+                .detailColumn
+                .padding(16)
+        } else {
+            ContentView()
+        }
+    }
+    .frame(width: width, height: height)
+    .background(Color.white)
+
+    let renderer = ImageRenderer(content: content)
+    renderer.scale = 2
+
+    guard let cgImage = renderer.cgImage else {
+        throw AppFailure.syncFailed("Failed to render UI snapshot.")
+    }
+
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    guard let pngData = bitmap.representation(using: NSBitmapImageRep.FileType.png, properties: [:]) else {
+        throw AppFailure.syncFailed("Failed to encode UI snapshot as PNG.")
+    }
+
+    try pngData.write(to: outputURL)
+}
+
 @main
 struct PPMSCalendarSyncTestRunner {
     static func main() async {
+        let environment = ProcessInfo.processInfo.environment
+        if let outputPath = environment["PPMS_SNAPSHOT_OUTPUT"] {
+            let width = Double(environment["PPMS_SNAPSHOT_WIDTH"] ?? "") ?? 980
+            let height = Double(environment["PPMS_SNAPSHOT_HEIGHT"] ?? "") ?? 900
+
+            do {
+                try await MainActor.run {
+                    try writeSnapshot(
+                        to: URL(fileURLWithPath: outputPath),
+                        width: width,
+                        height: height
+                    )
+                }
+                print("Wrote snapshot: \(outputPath)")
+                return
+            } catch {
+                fputs("\(error.localizedDescription)\n", stderr)
+                Foundation.exit(1)
+            }
+        }
+
         let source = SourceItem(
             name: "ppms",
             source: "https://docs.google.com/spreadsheets/d/1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg/edit?usp=sharing",
@@ -1605,7 +1649,7 @@ struct PPMSCalendarSyncApp: App {
         WindowGroup {
             ContentView()
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 980, height: 900)
     }
 }
 #endif
