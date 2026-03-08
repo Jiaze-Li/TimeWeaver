@@ -1107,32 +1107,37 @@ struct SlotRuleEditor: View {
             HStack(alignment: .center, spacing: 10) {
                 TextField("Sheet label", text: $rule.sheetLabel)
                     .textFieldStyle(.roundedBorder)
-                    .frame(minWidth: 140, maxWidth: 220)
+                    .frame(minWidth: 150, maxWidth: 220)
                 TextField("08:30", text: $rule.start)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
-                Text("to")
+                    .frame(width: 84)
+                Image(systemName: "arrow.right")
                     .foregroundStyle(.secondary)
+                    .frame(width: 18)
                 TextField("13:00", text: $rule.end)
                     .textFieldStyle(.roundedBorder)
-                    .frame(width: 90)
+                    .frame(width: 84)
                 Toggle("Next day", isOn: $rule.endsNextDay)
                     .toggleStyle(.checkbox)
+                    .fixedSize()
+                Spacer(minLength: 0)
             }
+            .padding(.vertical, 2)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 TextField("Sheet label", text: $rule.sheetLabel)
                     .textFieldStyle(.roundedBorder)
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     TextField("08:30", text: $rule.start)
                         .textFieldStyle(.roundedBorder)
-                    Text("to")
+                    Image(systemName: "arrow.right")
                         .foregroundStyle(.secondary)
                     TextField("13:00", text: $rule.end)
                         .textFieldStyle(.roundedBorder)
                 }
                 Toggle("Next day", isOn: $rule.endsNextDay)
                     .toggleStyle(.checkbox)
+                    .fixedSize()
             }
         }
     }
@@ -1434,23 +1439,34 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            GroupBox("Slot Times") {
-                VStack(alignment: .leading, spacing: 10) {
+            GroupBox(label: slotTimesHeader) {
+                VStack(alignment: .leading, spacing: 8) {
+                    ViewThatFits(in: .vertical) {
+                        HStack(alignment: .center, spacing: 10) {
+                            Text("Label")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 180, alignment: .leading)
+                            Text("Start")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 84, alignment: .leading)
+                            Text("End")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 102, alignment: .leading)
+                            Text("Carry")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 90, alignment: .leading)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.caption)
+
+                        EmptyView()
+                    }
+
                     ForEach(Array(model.slotRules.enumerated()), id: \.offset) { index, _ in
                         SlotRuleEditor(rule: $model.slotRules[index])
                             .onChange(of: model.slotRules[index]) { _ in
                                 model.persistRules()
                             }
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Button("Add Slot Rule") {
-                            model.addSlotRule()
-                        }
-                        if !model.slotRules.isEmpty {
-                            Button("Remove Last Rule") {
-                                model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
-                            }
-                        }
                     }
                     Text("Use 24-hour format, for example 08:30 or 18:00.")
                         .font(.caption)
@@ -1503,6 +1519,51 @@ struct ContentView: View {
                 Text("Event Title")
                 TextField("ppms", text: $model.draftName)
                     .textFieldStyle(.roundedBorder)
+            }
+        }
+    }
+
+    private var slotTimesHeader: some View {
+        ViewThatFits(in: .vertical) {
+            HStack(alignment: .center, spacing: 10) {
+                Text("Slot Times")
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Button {
+                    model.addSlotRule()
+                } label: {
+                    Label("Add Rule", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+
+                if !model.slotRules.isEmpty {
+                    Button(role: .destructive) {
+                        model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
+                    } label: {
+                        Label("Remove Last", systemImage: "minus")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Slot Times")
+                    .font(.headline)
+                Button {
+                    model.addSlotRule()
+                } label: {
+                    Label("Add Rule", systemImage: "plus")
+                }
+                .buttonStyle(.bordered)
+
+                if !model.slotRules.isEmpty {
+                    Button(role: .destructive) {
+                        model.removeSlotRules(at: IndexSet(integer: model.slotRules.count - 1))
+                    } label: {
+                        Label("Remove Last", systemImage: "minus")
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
         }
     }
