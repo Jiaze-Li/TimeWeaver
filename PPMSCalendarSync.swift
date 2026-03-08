@@ -1160,13 +1160,23 @@ struct SummaryCard: View {
     }
 }
 
+private struct WindowWidthPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct ContentView: View {
     @StateObject private var model = AppModel()
+    @State private var useSidebarLayout = true
+
+    private let sidebarEnterWidth: CGFloat = 760
+    private let sidebarExitWidth: CGFloat = 620
 
     var body: some View {
         GeometryReader { proxy in
-            let useSidebarLayout = proxy.size.width >= 980
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     headerPane
@@ -1181,22 +1191,31 @@ struct ContentView: View {
                         HStack(alignment: .top, spacing: 16) {
                             sourcesPane
                                 .frame(width: 240)
-                            editorPane
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                            VStack(alignment: .leading, spacing: 14) {
+                                editorPane
+                                outputPane
+                                statusPane
+                            }
+                            .frame(maxWidth: .infinity, alignment: .topLeading)
                         }
                     } else {
                         sourcesPane
                         editorPane
+                        outputPane
+                        statusPane
                     }
-
-                    outputPane
-                    statusPane
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 24)
                 .padding(.bottom, 16)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            .background(
+                Color.clear.preference(key: WindowWidthPreferenceKey.self, value: proxy.size.width)
+            )
+        }
+        .onPreferenceChange(WindowWidthPreferenceKey.self) { width in
+            updateLayoutMode(for: width)
         }
         .frame(minWidth: 420, minHeight: 760)
     }
@@ -1239,6 +1258,16 @@ struct ContentView: View {
                 ProgressView()
                     .controlSize(.small)
             }
+        }
+    }
+
+    private func updateLayoutMode(for width: CGFloat) {
+        if useSidebarLayout {
+            if width < sidebarExitWidth {
+                useSidebarLayout = false
+            }
+        } else if width >= sidebarEnterWidth {
+            useSidebarLayout = true
         }
     }
 
