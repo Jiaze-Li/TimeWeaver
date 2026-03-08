@@ -1350,9 +1350,19 @@ struct PPMSCalendarSyncTestRunner {
         )
         do {
             let result = try await ReservationExtractor.extract(source: source, slotRules: defaultSlotRules(), upcomingOnly: false)
+            print("All matched reservations: \(result.allEvents.count)")
             for event in result.allEvents {
                 print("\(iso8601(event.start))\t\(iso8601(event.end))\t\(event.sourceName)")
             }
+            let preview = try await CalendarSyncEngine().sync(
+                sources: [source],
+                slotRules: defaultSlotRules(),
+                upcomingOnly: true,
+                previewOnly: true
+            )
+            print("")
+            print("Preview output:")
+            print(preview.outputText)
         } catch {
             fputs("\(error.localizedDescription)\n", stderr)
             Foundation.exit(1)
