@@ -1202,19 +1202,62 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 420, minHeight: 760)
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    model.newSource()
+                } label: {
+                    Label("New", systemImage: "plus")
+                }
+
+                Button {
+                    model.saveCurrentSource()
+                } label: {
+                    Label("Save Source", systemImage: "square.and.arrow.down")
+                }
+
+                Button {
+                    model.removeSelectedSource()
+                } label: {
+                    Label("Remove", systemImage: "trash")
+                }
+                .disabled(model.selectedSourceID == nil)
+            }
+
+            ToolbarItemGroup {
+                Button {
+                    model.previewAll()
+                } label: {
+                    Label("Preview", systemImage: "eye")
+                }
+                .disabled(model.isBusy)
+
+                Button {
+                    model.syncAll()
+                } label: {
+                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(model.isBusy)
+            }
+
+            ToolbarItem {
+                Button {
+                    model.openCalendarApp()
+                } label: {
+                    Label("Open Calendar", systemImage: "calendar")
+                }
+            }
+        }
     }
 
     private var headerPane: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
             Text("PPMS Calendar Sync")
                 .font(.title2.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
             Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Open Calendar") {
-                model.openCalendarApp()
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1271,12 +1314,6 @@ struct ContentView: View {
                 if let value, let item = model.sources.first(where: { $0.id == value }) {
                     model.selectSource(item)
                 }
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Button("New") { model.newSource() }
-                Button("Save Source") { model.saveCurrentSource() }
-                Button("Remove") { model.removeSelectedSource() }
             }
         }
     }
@@ -1369,17 +1406,6 @@ struct ContentView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Button("Preview") {
-                    model.previewAll()
-                }
-                .disabled(model.isBusy)
-                Button("Sync Enabled Sources") {
-                    model.syncAll()
-                }
-                .disabled(model.isBusy)
             }
         }
     }
