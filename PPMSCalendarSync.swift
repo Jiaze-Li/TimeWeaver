@@ -1170,6 +1170,7 @@ struct ContentView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     headerPane
+                    primaryActionsPane
 
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
                         SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
@@ -1202,52 +1203,6 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 420, minHeight: 760)
-        .toolbar {
-            ToolbarItemGroup {
-                Button {
-                    model.newSource()
-                } label: {
-                    Label("New", systemImage: "plus")
-                }
-
-                Button {
-                    model.saveCurrentSource()
-                } label: {
-                    Label("Save Source", systemImage: "square.and.arrow.down")
-                }
-
-                Button {
-                    model.removeSelectedSource()
-                } label: {
-                    Label("Remove", systemImage: "trash")
-                }
-                .disabled(model.selectedSourceID == nil)
-            }
-
-            ToolbarItemGroup {
-                Button {
-                    model.previewAll()
-                } label: {
-                    Label("Preview", systemImage: "eye")
-                }
-                .disabled(model.isBusy)
-
-                Button {
-                    model.syncAll()
-                } label: {
-                    Label("Sync", systemImage: "arrow.triangle.2.circlepath")
-                }
-                .disabled(model.isBusy)
-            }
-
-            ToolbarItem {
-                Button {
-                    model.openCalendarApp()
-                } label: {
-                    Label("Open Calendar", systemImage: "calendar")
-                }
-            }
-        }
     }
 
     private var headerPane: some View {
@@ -1258,8 +1213,63 @@ struct ContentView: View {
             Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text("Create or select a source, save it, then preview and sync your bookings.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var primaryActionsPane: some View {
+        GroupBox("Actions") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Use these buttons as the main workflow.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("New Source") {
+                        model.newSource()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Save Source") {
+                        model.saveCurrentSource()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Remove Source") {
+                        model.removeSelectedSource()
+                    }
+                    .disabled(model.selectedSourceID == nil)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Button("Preview Matching Reservations") {
+                        model.previewAll()
+                    }
+                    .disabled(model.isBusy)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Sync Enabled Sources") {
+                        model.syncAll()
+                    }
+                    .disabled(model.isBusy)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button("Open Calendar") {
+                        model.openCalendarApp()
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var outputPane: some View {
