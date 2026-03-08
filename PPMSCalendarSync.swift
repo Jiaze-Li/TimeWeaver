@@ -1164,57 +1164,82 @@ struct ContentView: View {
     @StateObject private var model = AppModel()
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("PPMS Calendar Sync")
-                        .font(.title2.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Open Calendar") {
-                        model.openCalendarApp()
+        GeometryReader { proxy in
+            let useSidebarLayout = proxy.size.width >= 980
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    headerPane
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
+                        SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
+                        SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
+                        SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
-                    SummaryCard(title: "Sources", value: "\(model.sources.count)", symbol: "square.stack.3d.up")
-                    SummaryCard(title: "Enabled", value: "\(model.sources.filter(\.enabled).count)", symbol: "checkmark.circle")
-                    SummaryCard(title: "Calendars", value: "\(model.calendars.count)", symbol: "calendar")
-                }
-
-                sourcesPane
-                editorPane
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Output")
-                        .font(.headline)
-                    TextEditor(text: $model.output)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 220)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(model.status)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if model.isBusy {
-                        ProgressView()
-                            .controlSize(.small)
+                    if useSidebarLayout {
+                        HStack(alignment: .top, spacing: 16) {
+                            sourcesPane
+                                .frame(width: 240)
+                            editorPane
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    } else {
+                        sourcesPane
+                        editorPane
                     }
+
+                    outputPane
+                    statusPane
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 24)
+                .padding(.bottom, 16)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 24)
-            .padding(.bottom, 16)
         }
         .frame(minWidth: 420, minHeight: 760)
+    }
+
+    private var headerPane: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PPMS Calendar Sync")
+                .font(.title2.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Sync booking IDs from Google Sheets into Apple Calendar without duplicating events.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Calendar") {
+                model.openCalendarApp()
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var outputPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Output")
+                .font(.headline)
+            TextEditor(text: $model.output)
+                .font(.system(.body, design: .monospaced))
+                .frame(minHeight: 220)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                )
+        }
+    }
+
+    private var statusPane: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(model.status)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if model.isBusy {
+                ProgressView()
+                    .controlSize(.small)
+            }
+        }
     }
 
     private var sourcesPane: some View {
