@@ -1,0 +1,27 @@
+name: Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  macos-build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build app bundle
+        run: |
+          chmod +x ./build_native_app.sh
+          ./build_native_app.sh
+
+      - name: Archive app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PPMS-Calendar-Sync-app
+          path: build/PPMS Calendar Sync.app
