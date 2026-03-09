@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APP="${1:-$ROOT/build/PPMS Calendar Sync.app}"
+APP="${1:-$ROOT/build/TimeWeaver.app}"
 BIN_DIR="$APP/Contents/MacOS"
 RES_DIR="$APP/Contents/Resources"
 
@@ -15,7 +15,8 @@ swiftc -parse-as-library \
   -framework AppKit \
   -framework Combine \
   -framework EventKit \
-  -o "$BIN_DIR/PPMS Calendar Sync" \
+  -framework Security \
+  -o "$BIN_DIR/TimeWeaver" \
   "$ROOT/PPMSCalendarSync.swift"
 
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"

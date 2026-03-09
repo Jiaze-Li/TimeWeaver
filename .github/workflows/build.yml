@@ -18,10 +18,18 @@ jobs:
       - name: Build app bundle
         run: |
           chmod +x ./build_native_app.sh
+          chmod +x ./create_dmg.sh
           ./build_native_app.sh
+          ./create_dmg.sh
 
       - name: Archive app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: PPMS-Calendar-Sync-app
-          path: build/PPMS Calendar Sync.app
+          name: TimeWeaver-app
+          path: build/TimeWeaver.app
+
+      - name: Archive DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: TimeWeaver-dmg
+          path: build/TimeWeaver.dmg

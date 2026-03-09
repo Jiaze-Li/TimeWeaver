@@ -1,53 +1,47 @@
-# PPMS Calendar Sync
+# TimeWeaver
 
-PPMS Calendar Sync is a native macOS app that reads Google Sheets booking workbooks, matches reservations by booking ID, and writes the matching time slots into Apple Calendar.
+TimeWeaver is a native macOS app that turns sheets, timetables, and images into Apple Calendar events.
 
-The app is designed for lab equipment booking sheets that use monthly tabs and slot-based rows such as `8:30-1pm`, `1pm-6pm`, and `overnight`.
+It started as a PPMS booking sync tool and has since been generalized into a customer-facing import-and-sync desktop app.
 
-## Features
+## What It Does
+
+- Reads Google Sheets links, local `.xlsx` workbooks, and supported timetable images
+- Matches entries by `Booking ID`
+- Writes matching reservations into a chosen Apple Calendar
+- Supports preview, sync, update, and optional removal of events that were previously created by the app
+- Supports one-off image import and ongoing sheet automation in the same app
+- Supports built-in parsing, AI parsing, and provider-specific fallbacks
+
+## Current Product Direction
+
+TimeWeaver is no longer positioned as a PPMS-only utility. The product goal is:
+
+- a general sheet/image to calendar tool
+- compact but readable desktop UI
+- explicit main actions instead of hidden toolbar flows
+- customer-friendly wording instead of technical parser logs
+- minimal customer setup for supported AI providers
+
+## Current Features
 
 - Native macOS app built with SwiftUI and EventKit
-- Multiple sheet sources in one app
-- Per-source booking ID, title, and target calendar
-- Custom slot time mapping
+- Multiple saved sources
+- Adjustable split view between left and right columns
 - Preview before sync
-- Automatic polling while the app is open
-- Incremental sync without duplicate calendar events
-- No automatic deletes; removed bookings are only surfaced as manual delete candidates
-
-## What It Syncs
-
-For each enabled source, the app:
-
-1. Downloads or opens the workbook
-2. Scans month-named tabs
-3. Finds cells whose content matches the configured booking ID
-4. Converts each matching slot into a calendar event using the configured slot-time rules
-5. Merges adjacent slots into continuous events
-6. Creates or updates the matching Apple Calendar events
-
-Event title:
-
-- Uses the source name, for example `ppms`
-
-Event notes:
-
-- Stores only the original sheet link
-
-## Safety Defaults
-
-- Default calendar is chosen per source
-- Default filter is `Only upcoming reservations`
-- Preview mode does not write to Calendar
-- Sync mode creates and updates events
-- Deleted or removed bookings are never deleted automatically
-
-## Requirements
-
-- macOS 13 or later
-- Calendar access granted to the app
-- A public Google Sheets link or a local `.xlsx` workbook
-- Swift toolchain with Apple frameworks available on the build machine
+- Sync confirmation with change counts
+- Optional confirmation before deleting removed events
+- Auto sync while the app is open
+- Optional menu bar mode
+- Drag-and-drop image import with immediate preview/confirm flow
+- AI providers with presets:
+  - OpenAI
+  - Gemini
+  - Anthropic / Claude
+  - Kimi
+  - DeepSeek (text only)
+  - Custom
+- Local timetable image parser for structured schedule images, so some image imports do not require any API key
 
 ## Build
 
@@ -58,49 +52,75 @@ chmod +x ./build_native_app.sh
 ./build_native_app.sh
 ```
 
-This builds the app bundle into:
+This builds:
 
 ```text
-./build/PPMS Calendar Sync.app
+./build/TimeWeaver.app
 ```
 
-To build directly to another location:
+## Build a DMG
 
 ```bash
-./build_native_app.sh "/Users/yourname/Desktop/PPMS Calendar Sync.app"
+chmod +x ./create_dmg.sh
+./create_dmg.sh
 ```
 
-## Usage
+This creates:
 
-1. Launch the app.
-2. Grant Calendar access when macOS asks.
-3. Add one or more sources.
-4. For each source, provide:
-   - sheet link or local workbook path
-   - booking ID
-   - event title
-   - target Apple Calendar
-5. Adjust slot times if your sheet uses a different booking schedule.
-6. Run `Preview` to inspect matches and planned changes.
-7. Run `Sync Enabled Sources` to write events into Calendar.
+```text
+./build/TimeWeaver.dmg
+```
 
-## Automation
+## Release Artifacts
 
-- `Auto sync while the app is open` enables periodic sync
-- The polling interval is configurable in minutes
-- The app only adds or updates events it owns
+Local release artifacts are expected here:
 
-## Project Structure
+- `build/TimeWeaver.app`
+- `build/TimeWeaver.dmg`
 
-- `PPMSCalendarSync.swift` — app source
-- `Info.plist` — app bundle metadata
-- `build_native_app.sh` — local build script
+The DMG is the primary customer-facing download.
 
-## Release Readiness
+## Runtime Requirements
 
-This repository is structured so it can be published to GitHub directly after final review. Before a public release, you may want to add:
+- macOS 13 or later
+- Calendar access granted to the app
+- Public Google Sheets link, local `.xlsx`, or supported timetable image
+- API key only when an AI provider is needed
 
-- app screenshots
-- a project license
-- notarization and Developer ID signing
-- CI packaging and release automation
+## Data and Settings
+
+For migration stability, the app still stores local data under the legacy support directory:
+
+```text
+~/Library/Application Support/PPMSCalendarSync
+```
+
+Keychain entries also still use the legacy service name:
+
+```text
+PPMSCalendarSync
+```
+
+This is intentional so existing users do not lose settings during the rename to TimeWeaver.
+
+## Packaging / Publishing Notes
+
+- App bundle name: `TimeWeaver.app`
+- Desktop build target used during local QA: `/Users/jack/Desktop/TimeWeaver.app`
+- The project is suitable for GitHub publication
+- Before external customer distribution, prefer rotating any API keys that were ever used in local testing
+
+## Important Product Notes
+
+- Complex structured timetable images should prefer the local timetable parser first
+- Gemini is currently the strongest provider for difficult image interpretation
+- DeepSeek is currently treated as text-only in this app
+- Customer-facing output should stay concise and non-technical
+
+## Project Files
+
+- `PPMSCalendarSync.swift` — main app source
+- `Info.plist` — bundle metadata
+- `build_native_app.sh` — app bundle build script
+- `create_dmg.sh` — DMG packaging script
+- `DEVELOPMENT_LOG.md` — full project history, preferences, and handoff log

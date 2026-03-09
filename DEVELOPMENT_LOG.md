@@ -1,262 +1,387 @@
-# PPMS Calendar Sync 开发日志 / 项目交接文档
+# TimeWeaver 开发日志 / 项目经理交接文档
 
-最后更新：2026-03-08  
+最后更新：2026-03-09  
 当前项目目录：[PPMSCalendarSync](/Users/jack/PPMSCalendarSync)  
-当前桌面成品：[PPMS Calendar Sync.app](/Users/jack/Desktop/PPMS%20Calendar%20Sync.app)
+当前桌面成品：[TimeWeaver.app](/Users/jack/Desktop/TimeWeaver.app)  
+当前仓库默认构建产物：[TimeWeaver.app](/Users/jack/PPMSCalendarSync/build/TimeWeaver.app)
 
-## 1. 项目目标
+## 1. 先给下一个 PM 的一句话结论
 
-本项目的目标不是做一个一次性脚本，而是做一个**可长期维护、可发布、可交接的 macOS 原生应用**。核心业务是：
+这是一个已经从“PPMS 专用同步工具”演进为“通用 sheet / timetable / image -> Apple Calendar 导入与同步桌面应用”的项目。  
+当前产品名是 `TimeWeaver`，但为了不打断现有用户数据迁移，很多底层存储名字仍然沿用 `PPMSCalendarSync`。
 
-- 读取一个或多个 Google Sheets / 本地 `.xlsx` 预约表
-- 根据用户配置的 `booking ID`
-- 解析月度分页中的预约时间段
-- 同步到用户指定的 Apple Calendar
+接手这个项目时，最重要的不是继续堆功能，而是同时守住这三条：
 
-用户明确要求这个产品最终应满足以下定位：
+- 客户第一次打开就能理解怎么用
+- 页面信息密度高，但不能重叠、不能乱
+- 每次交付前都要真实 build 和真实测试，不接受“只改代码没验证”
 
-- 是一个**完整 app**，不是脚本壳或临时工具
-- 后续可以发布到 GitHub 给其他人使用
-- 支持多个 sheet source
-- 支持自动检查更新并同步
-- 删除行为必须极其保守
-- UI 不能像工程临时面板，必须有合理的交互逻辑
+## 2. 当前产品定位
 
-## 2. 用户明确提出过的关键要求
+当前定位已经明确不是：
 
-以下是用户在开发过程中明确表达过、且对后续接手人仍然有效的要求。它们应视为产品约束，而不是可随意改动的建议。
+- 不是一个实验室内部临时脚本
+- 不是一个只会读固定 PPMS 表格的同步器
+- 不是一个只靠工程师自己看懂的后台面板
 
-### 2.1 功能约束
+当前定位是：
 
-- 支持多个 source，而不是只支持一个 sheet link
-- 每个 source 至少包含：
-  - sheet link 或本地 workbook 路径
+- 通用的时间表导入与同步 macOS app
+- 支持公开 sheet、本地 `.xlsx`、结构化 timetable 图片
+- 支持本地解析、规则解析、AI 解析三层组合
+- 客户可用，未来可对外发布到 GitHub / DMG 下载
+
+## 3. 用户画像与合作偏好
+
+这一节非常重要。下一个项目经理如果不读，很容易重复犯错。
+
+### 3.1 用户对工作方式的偏好
+
+- 用户希望你像“项目经理 + 设计负责人 + QA”一起工作，不接受“你说一句我动一下”的被动式开发
+- 用户会直接指出你没有主动思考，这不是情绪问题，而是明确的协作要求
+- 用户非常重视你是否真实测试过，而不是只说“理论上没问题”
+- 用户不喜欢代码式解释，很多时候需要先翻译成人话
+- 用户会要求你把上下文和项目记录整理好，方便下一任无缝接手
+
+### 3.2 用户对 UI 的稳定偏好
+
+- 强烈反感大块无意义空白
+- 喜欢高信息密度，但不是小字体堆满屏
+- 明确要求“box 不要太大，但是信息要明显”
+- 不喜欢看起来像后台临时表单的布局
+- 不喜欢主路径藏在 toolbar 或纯图标入口
+- 只要是客户会看到的内容，就要用客户语言，不要把 parser 内部日志直接扔到前端
+- 对重叠、压缩、突兀换行、滚动异常都非常敏感
+
+### 3.3 用户对交付方式的偏好
+
+- 任何视觉或交互修改后，最好直接 build 到桌面成品给用户点开看
+- 老包和新包不要同时留在桌面上
+- 发布物要方便客户下载，优先提供 `.dmg`
+
+## 4. 产品方向演进历史
+
+### 阶段 A：PPMS 专用同步器
+
+最早目标是：
+
+- 读取 PPMS 风格的 Google Sheets
+- 用 booking ID 匹配固定时段
+- 写进 Apple Calendar
+
+这个阶段的核心问题：
+
+- 产品名太具体，局限在 PPMS
+- slot-based 规则过于依赖单一表格版式
+- UI 更像工程内部工具，不像对外产品
+
+### 阶段 B：原生 macOS 工具化
+
+做过的事：
+
+- 放弃 Python GUI 壳，转为原生 SwiftUI + EventKit
+- 引入多 source
+- 引入 Preview / Sync
+- 引入日历选择
+
+这个阶段暴露的问题：
+
+- 布局不稳
+- 高空白
+- 某些区域被垂直拉伸
+- 滚动和嵌套滚动体验差
+
+### 阶段 C：产品化与高密度重构
+
+做过的事：
+
+- 主路径从隐藏式操作改为正文显式 `New / Save / Remove / Preview / Sync / Calendar`
+- 左右双列布局稳定化
+- Output 改成 `Activity`
+- 支持 `Source` 列表、状态、输出、Automation、AI Parsing
+- 大量收紧 spacing、空白、按钮布局
+
+### 阶段 D：通用解析能力扩展
+
+做过的事：
+
+- 从固定 sheet 规则扩展到 AI provider
+- 加入 OpenAI / Gemini / Anthropic / Kimi / DeepSeek / Custom provider 预案
+- 增加图片导入
+- 对结构化 timetable 图片加入本地解析器，使部分图片不依赖 API
+
+### 阶段 E：客户交付与发布准备
+
+正在做 / 已做：
+
+- 产品重命名为 `TimeWeaver`
+- DMG 打包
+- GitHub 发布准备
+- 全量交接文档
+
+## 5. 当前功能事实，以现在代码为准
+
+### 5.1 Source 与导入
+
+- 支持多个 saved source
+- 每个 source 可包含：
+  - source 链接或本地路径
   - booking ID
   - event title
-  - target calendar
-- 预约事件标题应与来源 sheet 名 / source 名一致，例如 `ppms`
-- 备注里尽量简洁，只保留 `sheet link`
-- 用户要能自定义 time slot 的起止时间
+  - calendar
+  - enabled / use in sync
+- 支持 drag-and-drop 图片即时导入
+- 图片导入不会覆盖 saved sheet source；这是独立的一次性导入流
 
-### 2.2 Apple Calendar 相关约束
+### 5.2 解析策略
 
-- 默认同步到 `Experiment` 日历
-- 允许选择别的 calendar
-- **绝不自动删除** Calendar 事件
-- 如果 sheet 里某条预约消失，只能提示为 manual delete candidate，不能自动删
-- 更新只允许作用于本 app 自己创建和标记过的事件
+当前不是单一路径，而是多层解析：
 
-### 2.3 自动化约束
+- 规则解析器：适合固定 workbook 结构
+- 本地 timetable 图片解析器：适合彩色结构化课表图
+- AI parser：适合作为通用兜底和特殊版式处理
 
-- 支持自动轮询同步
-- 当前实现是“app 打开时后台轮询”
-- 用户未来可能希望更强的自动化，但当前版本先不做后台守护进程
+### 5.3 AI 平台现状
 
-### 2.4 UI / 产品要求
+当前内置 provider：
 
-用户对交互设计非常敏感，而且要求非常明确：
+- OpenAI
+- Gemini
+- Anthropic / Claude
+- Kimi
+- DeepSeek
+- Custom
 
-- 不要把明显低效的排版留到用户指出后才修
-- 不要把主路径藏在右上角图标里
-- 新用户第一次打开 app，就应该知道怎么用
-- 页面应尽量紧凑，提高单位面积的信息密度
-- 在不重叠的前提下，**优先使用双列**提升效率
-- 按钮和信息区不应出现无意义的大空白
-- 任何窗口尺寸下都不应该出现文字或按钮重叠
+当前真实产品结论：
 
-## 3. 产品经理视角下的核心设计原则
+- 结构化 timetable 图片，优先走本地解析器
+- 复杂图片里，Gemini 当前最稳
+- DeepSeek 在本项目中按 text only 处理
+- 客户不应被要求自己理解 endpoint；支持的平台应自动填 endpoint 和推荐 model
+- endpoint 输入仍然必须保留给自定义平台 / 代理 / 网关
 
-本项目的产品方向已经从“功能能跑通”转向“别人第一次打开也能理解并使用”。接手人应继续坚持以下原则：
+### 5.4 Calendar 行为
 
-### 3.1 主路径显式化
+当前不是“只增不删”的旧策略了。当前产品支持：
 
-用户已经明确否定过这些设计：
+- 新增
+- 更新
+- 删除此前由本 app 创建、且源里已经消失的事件
 
-- 把主操作藏在 toolbar 右上角
-- 把高频按钮做成只靠图标理解的入口
-- 让用户自己猜顺序
+但删除现在是可控的：
 
-因此当前主路径必须保持为正文中可见的显式动作：
+- `Show confirmation before sync`
+- `Ask before deleting removed events`
 
-- `New`
-- `Save`
-- `Remove`
-- `Preview`
-- `Sync`
-- `Calendar`
+Sync 前会弹确认，展示本次 `Add / Update / Remove` 数量。
 
-### 3.2 双列优先，但不能牺牲稳定性
+### 5.5 时间策略
 
-用户希望页面更高效，`Sources` 不应占太宽，因此：
+早期 `Slot Times` 已被产品上放弃。当前策略是：
 
-- 宽窗口优先用双列
-- 左侧 `Sources` 窄栏固定较小宽度
-- 右侧为主编辑区
-- 窄窗口可退回单列，但不能因为切换导致重叠或闪烁
+- sheet 里有明确时间，直接用 sheet 时间
+- sheet 里只有日期没时间，使用 `Default Work Hours`
+- 当前默认工作时间是产品字段，不再要求用户维护一堆 slot label 映射
 
-### 3.3 参数编辑区域应像“工具软件”，不是表单草稿
+## 6. 当前 UI 架构
 
-用户对 `Slot Times` 区域多次提出批评，核心不是单个像素，而是产品感：
+### 6.1 主窗口
 
-- 不要有大块无意义空白
-- 不要把高频按钮竖着浪费空间
-- 不要让一组参数看起来像还没整理过的后台表单
+当前主窗口结构：
 
-因此，`Slot Times` 必须继续沿“紧凑、参数表、区头动作栏”的方向优化。
+- 顶部：标题、状态、统计卡
+- 中部：Quick Actions
+- 下部：左右双列
+  - 左：`Sources + Activity`
+  - 右：`Source Details / AI Parsing / Default Work Hours / Automation`
 
-## 4. 当前技术方案
+### 6.2 当前布局状态
 
-### 4.1 技术栈
+当前主列不是固定死的 `HStack`，已经改为可拖动的 `HSplitView`。这意味着：
+
+- 用户可以手动拖动左右列宽度
+- 左栏不是写死宽度
+- 这对客户很重要，因为不同人关注 `Sources` / `Activity` 的权重不同
+
+### 6.3 当前窗口尺寸事实
+
+代码里的显式窗口底线已经多次下调。当前真实测得结果是：
+
+- 实际最小宽度约 `640`
+- 实际最小高度约 `652`
+
+说明：
+
+- 代码中显式 `minHeight` 已经比 652 更低
+- 652 是当前内容自然尺寸造成的真实下限
+- 如果还要继续压高度，要继续收顶部区、Quick Actions 和右侧 pane 的自然高度
+
+## 7. 用户明确表达过的设计原则
+
+这部分应视为产品约束。
+
+### 7.1 信息密度原则
+
+- 不要让 box 比内容大太多
+- 不要为了“紧凑”把信息一起缩没
+- 允许 box 变小，但信息本身要明显
+- 用户多次明确表示：空白应减少，但标签和数字应清晰
+
+### 7.2 交互路径原则
+
+- 所有高频主操作应显式出现在正文
+- 不要藏在二级菜单或需要猜的入口里
+- 图片导入要即时反馈，而不是让用户先把 source 配置污染掉
+
+### 7.3 语言原则
+
+- 客户前端看到的是产品语言
+- 纯技术日志不要直接显示
+- 像 `Parser note` 这种工程话术应避免出现在客户 UI
+
+### 7.4 解释原则
+
+- 用户经常会要求“用能听懂的话讲”
+- 如果用户问“为什么不能再缩”，优先解释是哪个界面区域会先出问题，而不是先甩代码片段
+
+## 8. 真实开发记录摘要
+
+以下是关键变更，不是所有 commit 的逐字抄录，而是产品/技术上的关键节点。
+
+### 8.1 布局和滚动
+
+- 修过多轮 section 被异常撑高的问题
+- 去掉过会导致不稳定高度计算的布局方案
+- Output 由可编辑滚动组件改成客户可读 Activity
+- 调整了 Activity 的 placeholder，使权限提示居中显示
+
+### 8.2 交互和可用性
+
+- `New` 做成真正清空草稿并有反馈
+- `Browse` 变成完整按钮，不再压坏
+- 输入框失焦行为做了统一处理
+- 图片支持拖拽导入
+
+### 8.3 同步安全
+
+- Preview 与 Sync 已明确分离
+- Sync 前可以展示变更摘要
+- 删除操作增加显式确认策略
+
+### 8.4 AI 相关
+
+- 平台预设与自动 endpoint/model
+- 本地 timetable parser 先行，AI 作为补充
+- 对低置信度 AI 结果增加 review gate
+- 对部分 provider 的图片能力做过 live probe
+
+### 8.5 包装与命名
+
+- 产品名从 `PPMS Calendar Sync` 改为 `TimeWeaver`
+- 桌面成品已切换为 `TimeWeaver.app`
+- 旧存储目录和 Keychain service 暂保留 legacy 名称
+
+## 9. 当前技术细节
+
+### 9.1 技术栈
 
 - Swift
 - SwiftUI
+- AppKit
+- Combine
 - EventKit
-- 原生 macOS app bundle
-- `swiftc` 构建
+- Security
 
-### 4.2 当前项目文件
+### 9.2 代码组织
+
+当前主要逻辑基本集中在：
 
 - [PPMSCalendarSync.swift](/Users/jack/PPMSCalendarSync/PPMSCalendarSync.swift)
+
+辅助文件：
+
 - [Info.plist](/Users/jack/PPMSCalendarSync/Info.plist)
 - [build_native_app.sh](/Users/jack/PPMSCalendarSync/build_native_app.sh)
 - [README.md](/Users/jack/PPMSCalendarSync/README.md)
 - [DEVELOPMENT_LOG.md](/Users/jack/PPMSCalendarSync/DEVELOPMENT_LOG.md)
 
-### 4.3 当前构建方式
+### 9.3 数据与迁移
 
-构建命令：
+当前仍沿用以下 legacy 标识，原因是避免升级后丢设置：
 
-```bash
-/Users/jack/PPMSCalendarSync/build_native_app.sh "/Users/jack/Desktop/PPMS Calendar Sync.app"
-```
+- Application Support: `~/Library/Application Support/PPMSCalendarSync`
+- Keychain service: `PPMSCalendarSync`
 
-仓库内默认构建输出：
+不要轻易改掉，除非你同时写好迁移。
 
-```bash
-/Users/jack/PPMSCalendarSync/build/PPMS Calendar Sync.app
-```
+## 10. 测试与验证习惯
 
-## 5. 当前已验证的业务能力
+用户对“你是否真的测试过”非常在意。当前推荐的最低交付标准：
 
-以下能力已经被实际跑通过，不是理论设计：
+- 代码改完后必须 build
+- 要把产物同步到桌面 app
+- 关键交互要做至少一轮真实运行验证
+- 宽度 / 高度 / 滚动 / 按钮响应，不能只靠脑补
 
-- 可以读取公开 Google Sheets
-- 可以识别月度分页
-- 可以解析 `Sun` 到 `Sat` 的日期布局
-- 可以识别 `8:30-1pm`、`1pm-6pm`、`overnight`
-- 可以根据 booking ID 精确匹配单元格
-- 可以把连续 slot 合并成连续 calendar event
-- 可以写入 Apple Calendar
-- 可以增量更新而不重复创建
-- 不会自动删除事件
-- 支持多个 source
+典型验证方式：
 
-## 6. 用户提供过的真实业务语境
+- 本地 build：`build_native_app.sh`
+- 同步桌面包
+- 启动桌面 app
+- 必要时用 AppleScript / System Events 检查窗口尺寸或响应
 
-这不是抽象 demo，而是用户真实实验室预约表场景：
+## 11. 已知风险与未完成事项
 
-- Google Sheets 是实验设备预约表
-- 月份页是按月排的设备预约
-- booking ID 例如 `LJZ`
-- 目标日历例子：`Experiment`
-- 典型来源之一：`ppms`
+### 11.1 当前已知风险
 
-重要说明：
+- 虽然最小高度已下调，但真实最小高度仍受内容自然尺寸影响
+- 右侧各 pane 仍可继续做纵向紧凑化
+- AI 结果在复杂非结构化图片上仍不能完全替代 review
+- 当前项目以单文件 Swift 源为主，继续扩展时维护成本会上升
 
-- 当前用户对“删除”极其敏感
-- 当前用户对“空白、重叠、低效排版”极其敏感
-- 当前用户期望你像产品负责人一样主动收敛问题，而不是等逐条指出
+### 11.2 下一步高价值方向
 
-## 7. 关键产品决策记录
+- 继续压缩右侧 pane 的自然高度
+- 继续整理 AI provider 抽象，避免主文件继续膨胀
+- 增加发布自动化，包括 DMG 和 GitHub Release 流程
+- 如需对外分发，补充签名 / notarization / license
 
-### 7.1 放弃 Python GUI 壳，转为原生 app
+## 12. 发布现状
 
-最初存在 Python + Tkinter / 打包壳路径，但用户明确认为：
+当前 GitHub 侧事实：
 
-- 启动慢
-- 卡
-- 不像正式 macOS app
+- 本地 git 仓库存在
+- 之前没有配置 remote
+- 当前机器上的 GitHub 账号已登录，可用于发布
 
-因此项目方向已切换为原生 macOS app。  
-旧 Python 过渡版已经清理掉，不应作为主线继续。
+当前发布目标：
 
-### 7.2 删除策略固定为“只提示，不自动执行”
+- 代码推送到 GitHub
+- 至少提供 `TimeWeaver.dmg` 作为客户下载物
 
-这条已经多次确认，不应回退：
+## 13. 对下一任 PM 的直接建议
 
-- 自动新增：允许
-- 自动更新：允许
-- 自动删除：不允许
-- 如果某条预约从 sheet 消失：只显示 manual delete candidate
+如果你继续这个项目，请遵循下面这些做法：
 
-### 7.3 Preview 与 Sync 必须真正分离
+- 不要先堆新功能，再等用户指出 UI 坏了
+- 不要只看代码逻辑，一定要打开桌面 app 看真实效果
+- 不要默认用户想听技术词汇，先讲产品层面的原因
+- 不要轻易回退到“只支持固定表格版式”的旧思路
+- 所有“客户可见文字”都按产品语言处理
+- 继续保持“先本地稳定解析，再用 AI 补充”的路线
 
-早期原型里曾出现过“预览实际上也写入日历”的风险。  
-现在的要求是：
+## 14. 本次交接时的关键文件和产物
 
-- Preview 只展示即将发生的变更
-- Sync 才真正写入 Apple Calendar
+- 源码：[PPMSCalendarSync.swift](/Users/jack/PPMSCalendarSync/PPMSCalendarSync.swift)
+- 本地构建脚本：[build_native_app.sh](/Users/jack/PPMSCalendarSync/build_native_app.sh)
+- DMG 脚本：`create_dmg.sh`（若不存在，需补）
+- 当前 build app：[TimeWeaver.app](/Users/jack/PPMSCalendarSync/build/TimeWeaver.app)
+- 当前桌面 app：[TimeWeaver.app](/Users/jack/Desktop/TimeWeaver.app)
 
-### 7.4 “0 match” 不能模糊表达
+## 15. 最后一条提醒
 
-用户曾遇到 `match 0`。真实情况是：
-
-- 可以解析到历史预约
-- 但由于默认只同步未来预约
-- 所以未来条目为 0
-
-因此产品需要把“总匹配数”和“被未来过滤掉的历史数”表达清楚。
-
-## 8. UI 迭代历史摘要
-
-这部分不是代码历史，而是产品历史。新 PM 接手时需要知道用户为什么会持续打回。
-
-### 阶段 A：临时能用
-
-特征：
-
-- 功能能跑
-- 布局粗糙
-- 主要目标是验证同步链路
-
-问题：
-
-- 用户不接受“壳产品”
-- 启动和交互都不符合正式 app 预期
-
-### 阶段 B：基础原生版
-
-特征：
-
-- 改为原生 macOS app
-- 加入多 source、slot time、自定义 calendar
-
-问题：
-
-- 多处重叠
-- 布局对窗口尺寸不稳
-- 操作路径不清晰
-
-### 阶段 C：重叠修复期
-
-做过的事情：
-
-- 改响应式布局
-- 改单双列切换
-- 把 output 放入主列
-
-用户反馈：
-
-- 不要只修一处重叠
-- 任何尺寸都不能重叠
-
-### 阶段 D：交互路径梳理期
-
-做过的事情：
-
-- 把主路径按钮从隐藏式 toolbar 转为正文显式按钮
-- 缩短按钮文案
-- 增加主次按钮层级
+用户不是在要一个“看起来差不多能用”的 demo，而是在要一个别人也可以下载、理解、运行、信任的产品。  
+接手后请继续保持 PM 视角、设计视角和 QA 视角一起工作，而不是只做代码搬运。
 
 用户反馈：
 
