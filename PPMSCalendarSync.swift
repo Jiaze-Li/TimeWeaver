@@ -3495,8 +3495,7 @@ private struct ReservationExtractor {
         let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
         let filteredEvents: [ReservationEvent]
         if upcomingOnly {
-            let now = Date()
-            filteredEvents = allEvents.filter { $0.end >= now }
+            filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
         } else {
             filteredEvents = allEvents
         }
@@ -3532,8 +3531,7 @@ private struct ReservationExtractor {
             let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
             let filteredEvents: [ReservationEvent]
             if upcomingOnly {
-                let now = Date()
-                filteredEvents = allEvents.filter { $0.end >= now }
+                filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
             } else {
                 filteredEvents = allEvents
             }
@@ -3571,8 +3569,7 @@ private struct ReservationExtractor {
         let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
         let filteredEvents: [ReservationEvent]
         if upcomingOnly {
-            let now = Date()
-            filteredEvents = allEvents.filter { $0.end >= now }
+            filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
         } else {
             filteredEvents = allEvents
         }
@@ -3759,6 +3756,10 @@ private struct ReservationExtractor {
             let label = worksheet.cellsByRow[row + offset]?[1]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if let rule = inferredSlotRule(from: label) {
                 slotRows.append((rule, row + offset))
+                continue
+            }
+            if !slotRows.isEmpty {
+                break
             }
         }
         return slotRows
@@ -4003,6 +4004,19 @@ private func mergeReservationOccurrences(occurrences: [SlotOccurrence], source: 
     }
 
     return merged
+}
+
+private func futureOnlyEvents(
+    from events: [ReservationEvent],
+    timeZone: TimeZone
+) -> [ReservationEvent] {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = timeZone
+    let now = Date()
+    guard let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else {
+        return events.filter { $0.start > now }
+    }
+    return events.filter { $0.start >= startOfTomorrow }
 }
 
 private actor CalendarSyncEngine {
@@ -6699,7 +6713,7 @@ struct ContentView: View {
 
     private var automationToggles: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("Only upcoming reservations", isOn: deferredBinding(\.upcomingOnly))
+            Toggle("Only future reservations", isOn: deferredBinding(\.upcomingOnly))
                 .onChange(of: model.upcomingOnly) { _ in
                     model.automationChanged()
                 }
