@@ -5410,8 +5410,9 @@ final class AppModel: ObservableObject {
         guard autoSyncEnabled else { return }
         let minutes = max(Int(autoSyncMinutes) ?? 15, 1)
         timer = Timer.scheduledTimer(withTimeInterval: Double(minutes * 60), repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.runAutomatedSync()
+            guard let self else { return }
+            Task { @MainActor [self] in
+                self.runAutomatedSync()
             }
         }
     }
