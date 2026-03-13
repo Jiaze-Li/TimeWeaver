@@ -275,6 +275,15 @@ struct PendingAIReview: Identifiable, Equatable {
     var id: UUID { sourceItemID }
 }
 
+struct DraftEditorState: Codable, Equatable {
+    var selectedSourceID: UUID?
+    var enabled: Bool
+    var name: String
+    var source: String
+    var bookingID: String
+    var calendar: String
+}
+
 struct AppSettings: Codable {
     var sources: [SourceItem]
     var workdayHours: WorkdayHours
@@ -287,6 +296,7 @@ struct AppSettings: Codable {
     var parserMode: ParserMode
     var aiParser: AIParserSettings
     var aiApprovals: [AIApprovalRecord]
+    var lastDraft: DraftEditorState?
 
     enum CodingKeys: String, CodingKey {
         case sources
@@ -301,6 +311,7 @@ struct AppSettings: Codable {
         case parserMode
         case aiParser
         case aiApprovals
+        case lastDraft
     }
 
     init(
@@ -314,7 +325,8 @@ struct AppSettings: Codable {
         menuBarModeEnabled: Bool,
         parserMode: ParserMode,
         aiParser: AIParserSettings,
-        aiApprovals: [AIApprovalRecord]
+        aiApprovals: [AIApprovalRecord],
+        lastDraft: DraftEditorState?
     ) {
         self.sources = sources
         self.workdayHours = workdayHours
@@ -327,6 +339,7 @@ struct AppSettings: Codable {
         self.parserMode = parserMode
         self.aiParser = aiParser
         self.aiApprovals = aiApprovals
+        self.lastDraft = lastDraft
     }
 
     init(from decoder: Decoder) throws {
@@ -343,6 +356,7 @@ struct AppSettings: Codable {
         self.parserMode = try container.decodeIfPresent(ParserMode.self, forKey: .parserMode) ?? .auto
         self.aiParser = try container.decodeIfPresent(AIParserSettings.self, forKey: .aiParser) ?? AIParserSettings()
         self.aiApprovals = try container.decodeIfPresent([AIApprovalRecord].self, forKey: .aiApprovals) ?? []
+        self.lastDraft = try container.decodeIfPresent(DraftEditorState.self, forKey: .lastDraft)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -358,6 +372,7 @@ struct AppSettings: Codable {
         try container.encode(parserMode, forKey: .parserMode)
         try container.encode(aiParser, forKey: .aiParser)
         try container.encode(aiApprovals, forKey: .aiApprovals)
+        try container.encodeIfPresent(lastDraft, forKey: .lastDraft)
     }
 }
 
@@ -844,7 +859,8 @@ private final class SettingsStore {
                 menuBarModeEnabled: false,
                 parserMode: .auto,
                 aiParser: AIParserSettings(),
-                aiApprovals: []
+                aiApprovals: [],
+                lastDraft: nil
             )
         }
 
@@ -860,7 +876,8 @@ private final class SettingsStore {
                 menuBarModeEnabled: false,
                 parserMode: .auto,
                 aiParser: AIParserSettings(),
-                aiApprovals: []
+                aiApprovals: [],
+                lastDraft: nil
             )
         }
 
@@ -1455,8 +1472,12 @@ private struct LocalTimetableImageParser {
             var times = extractLooseClocks(from: text)
             debugLog("Raw \(dateHeader.text): \(text)")
             debugLog("Raw times \(dateHeader.text): \(times)")
-            let relativeY = component.centerY - (weekRow.first?.centerY ?? component.centerY)
-            let template = nearestRowTemplate(to: relativeY, templates: rowTemplates)
+            let weekRowY = weekRow.first?.centerY ?? component.centerY
+            let template = preferredRowTemplate(
+                for: component,
+                weekRowY: weekRowY,
+                templates: rowTemplates
+            )
             if times.count < 2 {
                 if let template {
                     debugLog("Template \(dateHeader.text): \(template.start)-\(template.end)")
@@ -1778,6 +1799,24 @@ private struct LocalTimetableImageParser {
             return nil
         }
         return abs(candidate.offset - relativeY) < 32 ? candidate : nil
+    }
+
+    private static func preferredRowTemplate(
+        for component: LocalColorComponent,
+        weekRowY: Double,
+        templates: [(offset: Double, start: String, end: String)]
+    ) -> (offset: Double, start: String, end: String)? {
+        let topAligned = nearestRowTemplate(
+            to: Double(component.top) - weekRowY + 10,
+            templates: templates
+        )
+        if let topAligned {
+            return topAligned
+        }
+        return nearestRowTemplate(
+            to: component.centerY - weekRowY,
+            templates: templates
+        )
     }
 
     private static func resolveComponentClocks(
@@ -4751,24 +4790,42 @@ final class AppModel: ObservableObject {
             aiProvider: self.aiProvider,
             aiEndpointURL: self.aiEndpointURL,
             aiModel: self.aiModel,
-            aiApprovals: self.aiApprovals
+            aiApprovals: self.aiApprovals,
+            lastDraft: settings.lastDraft
         )
-        if let first = settings.sources.first {
-            self.selectedSourceID = first.id
-            self.draftEnabled = first.enabled
-            self.draftName = first.name
-            self.draftSource = first.source
-            self.draftBookingID = first.bookingID
-            self.draftCalendar = first.calendar
+        if let lastDraft = settings.lastDraft {
+            self.selectedSourceID = lastDraft.selectedSourceID
+            self.draftEnabled = lastDraft.enabled
+            self.draftName = lastDraft.name
+            self.draftSource = lastDraft.source
+            self.draftBookingID = lastDraft.bookingID
+            self.draftCalendar = lastDraft.calendar
+            if let selectedSourceID = lastDraft.selectedSourceID,
+               let selected = settings.sources.first(where: { $0.id == selectedSourceID }) {
+                self.draftEnabled = selected.enabled
+                self.draftName = selected.name
+                self.draftSource = selected.source
+                self.draftBookingID = selected.bookingID
+                self.draftCalendar = selected.calendar
+            }
         } else {
-            let first = defaultSources()[0]
-            self.sources = [first]
-            self.selectedSourceID = first.id
-            self.draftEnabled = first.enabled
-            self.draftName = first.name
-            self.draftSource = first.source
-            self.draftBookingID = first.bookingID
-            self.draftCalendar = first.calendar
+            if let first = settings.sources.first {
+                self.selectedSourceID = first.id
+                self.draftEnabled = first.enabled
+                self.draftName = first.name
+                self.draftSource = first.source
+                self.draftBookingID = first.bookingID
+                self.draftCalendar = first.calendar
+            } else {
+                let first = defaultSources()[0]
+                self.sources = [first]
+                self.selectedSourceID = first.id
+                self.draftEnabled = first.enabled
+                self.draftName = first.name
+                self.draftSource = first.source
+                self.draftBookingID = first.bookingID
+                self.draftCalendar = first.calendar
+            }
         }
         reconcileSourceStatuses()
         prepareCalendarsOnLaunch()
@@ -4818,6 +4875,7 @@ final class AppModel: ObservableObject {
             selectedSourceID = item.id
         }
         applyDraftFields(from: item)
+        schedulePersist()
     }
 
     func newSource() {
@@ -4828,6 +4886,7 @@ final class AppModel: ObservableObject {
         draftBookingID = ""
         draftCalendar = calendars.first ?? "Experiment"
         status = "Editing a new source. Fill the fields and click Save."
+        schedulePersist()
     }
 
     func saveCurrentSource() {
@@ -4897,6 +4956,10 @@ final class AppModel: ObservableObject {
     }
 
     func parserSettingsChanged() {
+        schedulePersist()
+    }
+
+    func draftFieldsChanged() {
         schedulePersist()
     }
 
@@ -5286,6 +5349,7 @@ final class AppModel: ObservableObject {
         draftSource = url.path
         output = ""
         status = "Selected source file"
+        schedulePersist()
         return true
     }
 
@@ -5305,6 +5369,17 @@ final class AppModel: ObservableObject {
         if draftCalendar != item.calendar {
             draftCalendar = item.calendar
         }
+    }
+
+    private func currentDraftState() -> DraftEditorState {
+        DraftEditorState(
+            selectedSourceID: selectedSourceID,
+            enabled: draftEnabled,
+            name: draftName,
+            source: draftSource,
+            bookingID: draftBookingID,
+            calendar: draftCalendar
+        )
     }
 
     private func isSupportedSourceFile(_ url: URL) -> Bool {
@@ -5368,7 +5443,8 @@ final class AppModel: ObservableObject {
                 endpointURL: aiEndpointURL.trimmingCharacters(in: .whitespacesAndNewlines),
                 model: aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
             ),
-            aiApprovals: aiApprovals
+            aiApprovals: aiApprovals,
+            lastDraft: currentDraftState()
         )
         let data = (try? JSONEncoder().encode(settings)) ?? Data()
         return (settings, data)
@@ -5388,7 +5464,8 @@ final class AppModel: ObservableObject {
         aiProvider: AIProvider,
         aiEndpointURL: String,
         aiModel: String,
-        aiApprovals: [AIApprovalRecord]
+        aiApprovals: [AIApprovalRecord],
+        lastDraft: DraftEditorState?
     ) -> Data {
         let settings = AppSettings(
             sources: sources,
@@ -5408,7 +5485,8 @@ final class AppModel: ObservableObject {
                 endpointURL: aiEndpointURL.trimmingCharacters(in: .whitespacesAndNewlines),
                 model: aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
             ),
-            aiApprovals: aiApprovals
+            aiApprovals: aiApprovals,
+            lastDraft: lastDraft
         )
         return (try? JSONEncoder().encode(settings)) ?? Data()
     }
@@ -6703,6 +6781,9 @@ struct ContentView: View {
             TextField("LJZ", text: deferredBinding(\.draftBookingID))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
+                .onChange(of: model.draftBookingID) { _ in
+                    model.draftFieldsChanged()
+                }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -6713,6 +6794,9 @@ struct ContentView: View {
             TextField("ppms", text: deferredBinding(\.draftName))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
+                .onChange(of: model.draftName) { _ in
+                    model.draftFieldsChanged()
+                }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -6728,6 +6812,9 @@ struct ContentView: View {
             .labelsHidden()
             .controlSize(.small)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: model.draftCalendar) { _ in
+                model.draftFieldsChanged()
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -6737,6 +6824,9 @@ struct ContentView: View {
             .textFieldStyle(.roundedBorder)
             .controlSize(.small)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: model.draftSource) { _ in
+                model.draftFieldsChanged()
+            }
     }
 
     private var browseSourceButton: some View {
@@ -6756,6 +6846,9 @@ struct ContentView: View {
             .fixedSize()
             .controlSize(.small)
             .help("When off, this source stays saved but is skipped during preview and sync.")
+            .onChange(of: model.draftEnabled) { _ in
+                model.draftFieldsChanged()
+            }
     }
 
     private var aiEndpointField: some View {
