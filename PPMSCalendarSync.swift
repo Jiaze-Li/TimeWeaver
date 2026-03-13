@@ -1455,9 +1455,10 @@ private struct LocalTimetableImageParser {
             var times = extractLooseClocks(from: text)
             debugLog("Raw \(dateHeader.text): \(text)")
             debugLog("Raw times \(dateHeader.text): \(times)")
+            let relativeY = component.centerY - (weekRow.first?.centerY ?? component.centerY)
+            let template = nearestRowTemplate(to: relativeY, templates: rowTemplates)
             if times.count < 2 {
-                let relativeY = component.centerY - (weekRow.first?.centerY ?? component.centerY)
-                if let template = nearestRowTemplate(to: relativeY, templates: rowTemplates) {
+                if let template {
                     debugLog("Template \(dateHeader.text): \(template.start)-\(template.end)")
                     if times.isEmpty {
                         times = [template.start, template.end]
@@ -1466,13 +1467,17 @@ private struct LocalTimetableImageParser {
                     }
                 }
             }
-            debugLog("Resolved times \(dateHeader.text): \(times)")
-            guard times.count >= 2 else {
+            let resolvedClocks = resolveComponentClocks(
+                extracted: times,
+                template: template
+            )
+            debugLog("Resolved times \(dateHeader.text): \(resolvedClocks.map { [$0.start, $0.end] } ?? [])")
+            guard let resolvedClocks else {
                 debugLog("Could not resolve times for \(dateHeader.text) component text: \(text)")
                 return nil
             }
-            let startClock = times[0]
-            let endClock = times[times.count - 1]
+            let startClock = resolvedClocks.start
+            let endClock = resolvedClocks.end
             guard let start = try? buildDate(from: dateHeader.date, timeString: startClock, in: timeZone),
                   let rawEnd = try? buildDate(from: dateHeader.date, timeString: endClock, in: timeZone) else {
                 return nil
@@ -1773,6 +1778,74 @@ private struct LocalTimetableImageParser {
             return nil
         }
         return abs(candidate.offset - relativeY) < 32 ? candidate : nil
+    }
+
+    private static func resolveComponentClocks(
+        extracted: [String],
+        template: (offset: Double, start: String, end: String)?
+    ) -> (start: String, end: String)? {
+        let unique = deduplicatedSortedClocks(extracted)
+        guard !unique.isEmpty else {
+            guard let template else { return nil }
+            return (template.start, template.end)
+        }
+
+        if unique.count == 1 {
+            guard let template else { return nil }
+            return (template.start, template.end)
+        }
+
+        guard let template else {
+            return (unique[0], unique[unique.count - 1])
+        }
+
+        if unique.contains(template.start), unique.contains(template.end) {
+            return (template.start, template.end)
+        }
+
+        let candidatePairs = unique.enumerated().flatMap { lhs in
+            unique.enumerated().compactMap { rhs -> (String, String)? in
+                guard rhs.offset > lhs.offset else { return nil }
+                return (lhs.element, rhs.element)
+            }
+        }
+
+        let templateStart = minutesSinceMidnight(template.start) ?? 0
+        let templateEnd = minutesSinceMidnight(template.end) ?? 0
+        let templateDuration = max(templateEnd - templateStart, 0)
+
+        let bestPair = candidatePairs.min { lhs, rhs in
+            scoreClockPair(lhs, templateStart: templateStart, templateEnd: templateEnd, templateDuration: templateDuration)
+            < scoreClockPair(rhs, templateStart: templateStart, templateEnd: templateEnd, templateDuration: templateDuration)
+        }
+
+        guard let bestPair else {
+            return (template.start, template.end)
+        }
+
+        let bestScore = scoreClockPair(
+            bestPair,
+            templateStart: templateStart,
+            templateEnd: templateEnd,
+            templateDuration: templateDuration
+        )
+
+        if bestScore <= 150 {
+            return bestPair
+        }
+        return (template.start, template.end)
+    }
+
+    private static func scoreClockPair(
+        _ pair: (String, String),
+        templateStart: Int,
+        templateEnd: Int,
+        templateDuration: Int
+    ) -> Int {
+        let start = minutesSinceMidnight(pair.0) ?? 0
+        let end = minutesSinceMidnight(pair.1) ?? 0
+        let duration = max(end - start, 0)
+        return abs(start - templateStart) + abs(end - templateEnd) + abs(duration - templateDuration) * 2
     }
 
     private static func intersects(
