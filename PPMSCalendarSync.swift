@@ -4184,6 +4184,7 @@ private actor CalendarSyncEngine {
                     source: source,
                     extraction: extraction,
                     state: &state,
+                    upcomingOnly: upcomingOnly,
                     previewOnly: previewOnly,
                     aiApprovals: aiApprovals
                 )
@@ -4270,6 +4271,7 @@ private actor CalendarSyncEngine {
         source: SourceItem,
         extraction: ExtractionResult,
         state: inout SyncState,
+        upcomingOnly: Bool,
         previewOnly: Bool,
         aiApprovals: [AIApprovalRecord]
     ) throws -> SourceSyncReport {
@@ -4340,6 +4342,14 @@ private actor CalendarSyncEngine {
                 return nil
             }
             guard !activeKeys.contains(key) else { return nil }
+            if upcomingOnly {
+                let singaporeTimeZone = TimeZone(identifier: "Asia/Singapore") ?? .current
+                guard let start = parseFlexibleISO8601(value.startISO, timeZone: singaporeTimeZone),
+                      start >= Date() else {
+                    // Upcoming-only sync should not touch historical events.
+                    return nil
+                }
+            }
             return DeleteCandidate(
                 syncKey: key,
                 eventIdentifier: value.eventIdentifier,
@@ -6103,11 +6113,11 @@ struct ContentView: View {
     }
 
     fileprivate var sidebarPane: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VSplitView {
             sourcesPane
-            Divider()
+                .frame(minHeight: 120, idealHeight: 220, maxHeight: .infinity, alignment: .topLeading)
             outputPane
-                .frame(maxHeight: .infinity, alignment: .topLeading)
+                .frame(minHeight: 160, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(10)
@@ -6437,6 +6447,7 @@ struct ContentView: View {
                     .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
             )
         }
+        .padding(.top, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -6492,9 +6503,8 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: sourceListHeight)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
@@ -6948,12 +6958,6 @@ struct ContentView: View {
             values.insert(current, at: 0)
         }
         return values
-    }
-
-    private var sourceListHeight: CGFloat {
-        let rowCount = max(model.sources.count, 1)
-        let estimatedHeight = CGFloat(rowCount) * 60 + 18
-        return min(max(estimatedHeight, 108), 220)
     }
 
     @ViewBuilder
