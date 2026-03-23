@@ -3530,7 +3530,8 @@ private struct ReservationExtractor {
         workdayHours: WorkdayHours,
         upcomingOnly: Bool,
         parserMode: ParserMode,
-        aiConfiguration: AIServiceConfiguration?
+        aiConfiguration: AIServiceConfiguration?,
+        referenceDate: Date = Date()
     ) async throws -> ExtractionResult {
         if let imageURL = localImageURL(from: source.source) {
             return try await extractImageSource(
@@ -3539,7 +3540,8 @@ private struct ReservationExtractor {
                 upcomingOnly: upcomingOnly,
                 parserMode: parserMode,
                 aiConfiguration: aiConfiguration,
-                imageURL: imageURL
+                imageURL: imageURL,
+                referenceDate: referenceDate
             )
         }
 
@@ -3607,7 +3609,7 @@ private struct ReservationExtractor {
         let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
         let filteredEvents: [ReservationEvent]
         if upcomingOnly {
-            filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
+            filteredEvents = futureOnlyEvents(from: allEvents, referenceDate: referenceDate)
         } else {
             filteredEvents = allEvents
         }
@@ -3630,7 +3632,8 @@ private struct ReservationExtractor {
         upcomingOnly: Bool,
         parserMode: ParserMode,
         aiConfiguration: AIServiceConfiguration?,
-        imageURL: URL
+        imageURL: URL,
+        referenceDate: Date
     ) async throws -> ExtractionResult {
         let timeZone = TimeZone(identifier: "Asia/Singapore") ?? .current
         if let localResult = try LocalTimetableImageParser.parse(
@@ -3643,7 +3646,7 @@ private struct ReservationExtractor {
             let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
             let filteredEvents: [ReservationEvent]
             if upcomingOnly {
-                filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
+                filteredEvents = futureOnlyEvents(from: allEvents, referenceDate: referenceDate)
             } else {
                 filteredEvents = allEvents
             }
@@ -3681,7 +3684,7 @@ private struct ReservationExtractor {
         let allEvents = mergeReservationOccurrences(occurrences: occurrences, source: source)
         let filteredEvents: [ReservationEvent]
         if upcomingOnly {
-            filteredEvents = futureOnlyEvents(from: allEvents, timeZone: timeZone)
+            filteredEvents = futureOnlyEvents(from: allEvents, referenceDate: referenceDate)
         } else {
             filteredEvents = allEvents
         }
@@ -4120,11 +4123,9 @@ private func mergeReservationOccurrences(occurrences: [SlotOccurrence], source: 
 
 private func futureOnlyEvents(
     from events: [ReservationEvent],
-    timeZone: TimeZone
+    referenceDate: Date
 ) -> [ReservationEvent] {
-    _ = timeZone
-    let now = Date()
-    return events.filter { $0.start >= now }
+    events.filter { $0.end >= referenceDate }
 }
 
 private actor CalendarSyncEngine {
@@ -4164,6 +4165,7 @@ private actor CalendarSyncEngine {
         aiApprovals: [AIApprovalRecord]
     ) async throws -> SyncRunResult {
         try await ensureAccess()
+        let referenceDate = Date()
         var state = SettingsStore.loadState()
         var reports: [SourceSyncReport] = []
         var lines: [String] = []
@@ -4175,7 +4177,8 @@ private actor CalendarSyncEngine {
                     workdayHours: workdayHours,
                     upcomingOnly: upcomingOnly,
                     parserMode: parserMode,
-                    aiConfiguration: aiConfiguration
+                    aiConfiguration: aiConfiguration,
+                    referenceDate: referenceDate
                 )
                 let report = try syncSource(
                     source: source,
@@ -4478,6 +4481,15 @@ private func iso8601(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime]
     formatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    return formatter.string(from: date)
+}
+
+private func syncTimestampString(_ date: Date) -> String {
+    let formatter = DateFormatter()
+    formatter.calendar = Calendar(identifier: .gregorian)
+    formatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH:mm"
     return formatter.string(from: date)
 }
 
@@ -5255,6 +5267,7 @@ final class AppModel: ObservableObject {
         output = ""
         status = previewOnly ? "Previewing..." : "Syncing..."
         setLoadingStatuses(for: enabledSources)
+        let syncStartedAt = Date()
 
         Task {
             do {
@@ -5270,14 +5283,22 @@ final class AppModel: ObservableObject {
                     aiConfiguration: resolvedAIConfiguration,
                     aiApprovals: aiApprovals
                 )
-                output = result.outputText
+                if previewOnly {
+                    output = result.outputText
+                } else {
+                    output = "Sync at \(syncTimestampString(syncStartedAt))\n" + result.outputText
+                }
                 if previewOnly {
                     pendingAIReviews = pendingReviews(from: result.reports)
                 } else {
                     pendingAIReviews = []
                 }
                 applySourceStatuses(from: result.reports)
-                status = previewOnly ? "Preview complete" : "Sync complete"
+                if previewOnly {
+                    status = "Preview complete"
+                } else {
+                    status = "Sync complete\nSync at \(syncTimestampString(syncStartedAt))"
+                }
             } catch {
                 output = error.localizedDescription
                 if previewOnly {
@@ -5613,6 +5634,7 @@ final class AppModel: ObservableObject {
         output = ""
         status = "Checking sync changes..."
         setLoadingStatuses(for: enabledSources)
+        let syncStartedAt = Date()
 
         Task {
             do {
@@ -5646,7 +5668,7 @@ final class AppModel: ObservableObject {
                     runSync(previewOnly: false)
                     return
                 } else {
-                    status = "No changes to sync"
+                    status = "No changes to sync\nSync at \(syncTimestampString(syncStartedAt))"
                 }
             } catch {
                 output = error.localizedDescription
