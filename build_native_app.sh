@@ -9,6 +9,13 @@ RES_DIR="$APP/Contents/Resources"
 rm -rf "$APP"
 mkdir -p "$BIN_DIR" "$RES_DIR"
 
+SOURCE_FILES=("$ROOT/PPMSCalendarSync.swift")
+if [[ -d "$ROOT/Sources" ]]; then
+  while IFS= read -r file; do
+    SOURCE_FILES+=("$file")
+  done < <(find "$ROOT/Sources" -type f -name '*.swift' | sort)
+fi
+
 swiftc -parse-as-library \
   -target arm64-apple-macosx13.0 \
   -framework SwiftUI \
@@ -17,7 +24,7 @@ swiftc -parse-as-library \
   -framework EventKit \
   -framework Security \
   -o "$BIN_DIR/TimeWeaver" \
-  "$ROOT/PPMSCalendarSync.swift"
+  "${SOURCE_FILES[@]}"
 
 cp "$ROOT/Info.plist" "$APP/Contents/Info.plist"
 if [[ -f "$ROOT/AppIcon.icns" ]]; then
