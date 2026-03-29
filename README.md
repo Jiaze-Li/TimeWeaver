@@ -89,13 +89,19 @@ The DMG is the primary customer-facing download.
 
 ## Data and Settings
 
-For migration stability, the app still stores local data under the legacy support directory:
+App data is now stored under Bundle ID:
+
+```text
+~/Library/Application Support/com.jiaze.timeweaver
+```
+
+On first launch after upgrading, files from the legacy directory below are copied automatically if the new location is empty:
 
 ```text
 ~/Library/Application Support/PPMSCalendarSync
 ```
 
-Keychain entries also still use the legacy service name:
+Keychain entries still use the legacy service name (for backward compatibility):
 
 ```text
 PPMSCalendarSync
@@ -119,7 +125,20 @@ This is intentional so existing users do not lose settings during the rename to 
 
 ## Project Files
 
-- `PPMSCalendarSync.swift` — main app source
+- `PPMSCalendarSync.swift` — app shell and UI (still being split)
+- `Sources/Models/SourceItem.swift` — source model and workday/slot baseline structs
+- `Sources/Models/AppSettings.swift` — persisted settings and AI approval model
+- `Sources/Models/SyncState.swift` — sync-state storage model
+- `Sources/TimeWeaverCore/SyncDecisionLogic.swift` — parser fallback and sync decision logic
+- `Tests/TimeWeaverCoreTests/SyncDecisionLogicTests.swift` — unit tests for fallback, mutation, and fingerprint logic
+- `Sources/Sync/CalendarSyncEngine.swift` — reservation extraction and calendar sync engine
+- `Sources/Storage/Stores.swift` — settings/keychain persistence and migration
+- `Sources/Parsers/AIWorkbookNormalizer.swift` — AI workbook/image normalization and provider request flow
+- `Sources/Parsers/LocalImageParser.swift` — local timetable image parser and OCR/color heuristics
+- `Sources/Parsers/XMLWorkbookParsers.swift` — workbook/sharedStrings/relationship XML parsing
+- `Sources/Parsers/WorksheetParser.swift` — worksheet cell extraction parser
+- `Sources/Parsers/XLSXPackage.swift` — workbook unzip and file access wrapper
+- `Sources/UI/Components/` — reusable UI component split target (next step)
 - `Info.plist` — bundle metadata
 - `build_native_app.sh` — app bundle build script
 - `create_dmg.sh` — DMG packaging script
