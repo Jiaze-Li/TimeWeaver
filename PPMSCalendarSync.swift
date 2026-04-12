@@ -75,8 +75,8 @@ struct TimeWeaverTestRunner {
         let source = SourceItem(
             name: environment["PPMS_TEST_SOURCE_NAME"] ?? "ppms",
             source: environment["PPMS_TEST_SOURCE_URL"] ?? "https://docs.google.com/spreadsheets/d/1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg/edit?usp=sharing",
-            bookingID: environment["PPMS_TEST_BOOKING_ID"] ?? "LJZ",
-            calendar: environment["PPMS_TEST_CALENDAR"] ?? "Experiment"
+            bookingID: environment["PPMS_TEST_BOOKING_ID"] ?? defaultBookingID,
+            calendar: environment["PPMS_TEST_CALENDAR"] ?? defaultCalendarName
         )
         let parserMode = ParserMode(rawValue: environment["PPMS_TEST_PARSER_MODE"] ?? "") ?? .rulesOnly
         let aiProvider = AIProvider(rawValue: environment["PPMS_TEST_AI_PROVIDER"] ?? "")

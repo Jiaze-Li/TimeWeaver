@@ -51,18 +51,10 @@ extension AppModel {
 
         Task {
             do {
-                let preview = try await calendarSyncEngine.sync(
+                let preview = try await performSync(
                     sources: [source],
-                    workdayHours: WorkdayHours(
-                        start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                        end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ),
                     upcomingOnly: false,
-                    previewOnly: true,
-                    parserMode: ui.parserMode,
-                    aiConfiguration: resolvedAIConfiguration,
-                    aiApprovals: ui.aiApprovals,
-                    schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
+                    previewOnly: true
                 )
 
                 guard let report = preview.reports.first, report.errorMessage == nil else {
@@ -171,18 +163,11 @@ extension AppModel {
             do {
                 let sourceKey = sourceIdentity(for: plan.source)
                 let beforeSnapshot = SettingsStore.loadState().events.filter { $0.value.sourceID == sourceKey }
-                let syncResult = try await calendarSyncEngine.sync(
+                let syncResult = try await performSync(
                     sources: [plan.source],
-                    workdayHours: WorkdayHours(
-                        start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                        end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ),
                     upcomingOnly: false,
                     previewOnly: false,
-                    parserMode: ui.parserMode,
-                    aiConfiguration: resolvedAIConfiguration,
                     aiApprovals: imageImportApprovals(for: plan),
-                    schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
                     titleOverrides: titleOverrides
                 )
                 let afterSnapshot = SettingsStore.loadState().events.filter { $0.value.sourceID == sourceKey }

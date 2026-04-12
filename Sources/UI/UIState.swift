@@ -72,7 +72,7 @@ struct UIState {
             draftSource: draftSource,
             draftBookingID: draftBookingID,
             draftCalendar: draftCalendar,
-            calendars: ["Experiment"],
+            calendars: [defaultCalendarName],
             calendarAccessState: .unknown,
             output: "",
             status: "Ready",

@@ -26,14 +26,14 @@ func deterministicUUID(for text: String) -> UUID {
 func iso8601(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime]
-    formatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    formatter.timeZone = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier)
     return formatter.string(from: date)
 }
 
 func syncTimestampString(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.calendar = Calendar(identifier: .gregorian)
-    formatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    formatter.timeZone = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier)
     formatter.locale = Locale(identifier: "en_US_POSIX")
     formatter.dateFormat = "yyyy-MM-dd HH:mm"
     return formatter.string(from: date)
@@ -45,19 +45,19 @@ func customerFacingInterval(start: Date, end: Date) -> String {
 
     let dayFormatter = DateFormatter()
     dayFormatter.calendar = calendar
-    dayFormatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    dayFormatter.timeZone = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier)
     dayFormatter.locale = Locale(identifier: "en_US_POSIX")
     dayFormatter.dateFormat = "yyyy-MM-dd"
 
     let timeFormatter = DateFormatter()
     timeFormatter.calendar = calendar
-    timeFormatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    timeFormatter.timeZone = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier)
     timeFormatter.locale = Locale(identifier: "en_US_POSIX")
     timeFormatter.dateFormat = "HH:mm"
 
     let dateTimeFormatter = DateFormatter()
     dateTimeFormatter.calendar = calendar
-    dateTimeFormatter.timeZone = TimeZone(identifier: "Asia/Singapore")
+    dateTimeFormatter.timeZone = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier)
     dateTimeFormatter.locale = Locale(identifier: "en_US_POSIX")
     dateTimeFormatter.dateFormat = "yyyy-MM-dd HH:mm"
 

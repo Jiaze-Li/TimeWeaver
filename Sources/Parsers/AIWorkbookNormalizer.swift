@@ -156,6 +156,9 @@ struct AIWorkbookNormalizer {
     private static let normalizationCacheTTL: TimeInterval = 30 * 60
     private static var normalizationCache: [String: CachedAINormalizationResult] = [:]
     private static let normalizationCacheLock = NSLock()
+    private static let visibleClockRegex = try! NSRegularExpression(pattern: #"(?<!\d)(\d{1,2}):(\d{2})(?!\d)"#)
+    private static let visibleDateWithYearRegex = try! NSRegularExpression(pattern: #"(?<!\d)(20\d{2})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})(?!\d)"#)
+    private static let visibleDateWithoutYearRegex = try! NSRegularExpression(pattern: #"(?<!\d)(\d{1,2})\D{0,3}(\d{1,2})(?!\d)"#)
 
     static func normalizeImage(
         source: SourceItem,
@@ -572,7 +575,7 @@ struct AIWorkbookNormalizer {
 
         if let components = firstMatch(
             in: normalized,
-            pattern: #"(?<!\d)(20\d{2})\D{0,3}(\d{1,2})\D{0,3}(\d{1,2})(?!\d)"#
+            regex: visibleDateWithYearRegex
         ),
            let year = Int(components[0]),
            let month = Int(components[1]),
@@ -583,7 +586,7 @@ struct AIWorkbookNormalizer {
 
         if let components = firstMatch(
             in: normalized,
-            pattern: #"(?<!\d)(\d{1,2})\D{0,3}(\d{1,2})(?!\d)"#
+            regex: visibleDateWithoutYearRegex
         ),
            let month = Int(components[0]),
            let day = Int(components[1]) {
@@ -614,7 +617,7 @@ struct AIWorkbookNormalizer {
         guard let rawText else { return nil }
         guard let match = firstMatch(
             in: rawText.replacingOccurrences(of: "：", with: ":"),
-            pattern: #"(?<!\d)(\d{1,2}):(\d{2})(?!\d)"#
+            regex: visibleClockRegex
         ) else {
             return nil
         }
@@ -626,9 +629,8 @@ struct AIWorkbookNormalizer {
 
     private static func extractVisibleClocks(from rawText: String) -> [String] {
         let normalized = rawText.replacingOccurrences(of: "：", with: ":")
-        let regex = try! NSRegularExpression(pattern: #"(?<!\d)(\d{1,2}):(\d{2})(?!\d)"#)
         let nsRange = NSRange(normalized.startIndex..., in: normalized)
-        return regex.matches(in: normalized, range: nsRange).compactMap { match in
+        return visibleClockRegex.matches(in: normalized, range: nsRange).compactMap { match in
             guard let hourRange = Range(match.range(at: 1), in: normalized),
                   let minuteRange = Range(match.range(at: 2), in: normalized),
                   let hour = Int(normalized[hourRange]),
@@ -748,8 +750,7 @@ struct AIWorkbookNormalizer {
         return output.isEmpty ? nil : output
     }
 
-    private static func firstMatch(in source: String, pattern: String) -> [String]? {
-        let regex = try! NSRegularExpression(pattern: pattern)
+    private static func firstMatch(in source: String, regex: NSRegularExpression) -> [String]? {
         let nsRange = NSRange(source.startIndex..., in: source)
         guard let match = regex.firstMatch(in: source, range: nsRange) else {
             return nil

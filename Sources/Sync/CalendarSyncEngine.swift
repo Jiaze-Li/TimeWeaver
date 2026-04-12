@@ -777,7 +777,7 @@ actor CalendarSyncEngine {
                 trackedStartISO: value.startISO,
                 upcomingOnly: upcomingOnly,
                 now: Date(),
-                timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current
+                timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current
             ) else { return nil }
             return DeleteCandidate(
                 syncKey: key,
@@ -796,8 +796,8 @@ actor CalendarSyncEngine {
                 }
                 state.events.removeValue(forKey: candidate.syncKey)
             }
-            if let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current),
-               let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current) {
+            if let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current),
+               let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current) {
                 actions.append(
                     EventAction(
                         status: previewOnly ? "would delete" : "deleted",
@@ -847,8 +847,8 @@ actor CalendarSyncEngine {
             return item
         }
 
-        guard let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current),
-              let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current) else {
+        guard let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current),
+              let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current) else {
             return nil
         }
         let predicate = store.predicateForEvents(

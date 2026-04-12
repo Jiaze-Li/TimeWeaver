@@ -122,7 +122,7 @@ struct SourceDetailsPaneView: View {
     private var bookingIDField: some View {
         VStack(alignment: .leading, spacing: 4) {
             FieldLabel(title: "Booking ID")
-            TextField("LJZ", text: deferredBinding(model: model, \.draftBookingID))
+            TextField(defaultBookingID, text: deferredBinding(model: model, \.draftBookingID))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
                 .onChange(of: model.ui.draftBookingID) { _ in

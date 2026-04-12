@@ -129,6 +129,9 @@ struct GeminiPart: Decodable {
 }
 
 struct LocalTimetableImageParser {
+    private static let standardClockRegex = try! NSRegularExpression(pattern: #"(\d{1,2})[:](\d{2})"#)
+    private static let compactClockRegex = try! NSRegularExpression(pattern: #"(?<!\d)(\d{2})(\d{2})(?!\d)"#)
+
     private static var debugLoggingEnabled: Bool {
         ProcessInfo.processInfo.environment["PPMS_DEBUG_LOCAL_IMAGE"] == "1"
     }
@@ -683,8 +686,7 @@ struct LocalTimetableImageParser {
             .replacingOccurrences(of: "i", with: "1")
 
         var clocks: [String] = []
-        let standard = try! NSRegularExpression(pattern: #"(\d{1,2})[:](\d{2})"#)
-        for match in standard.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) {
+        for match in standardClockRegex.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) {
             guard let hourRange = Range(match.range(at: 1), in: normalized),
                   let minuteRange = Range(match.range(at: 2), in: normalized),
                   let hour = Int(normalized[hourRange]),
@@ -696,8 +698,7 @@ struct LocalTimetableImageParser {
             clocks.append(String(format: "%02d:%02d", hour, minute))
         }
 
-        let compact = try! NSRegularExpression(pattern: #"(?<!\d)(\d{2})(\d{2})(?!\d)"#)
-        for match in compact.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) {
+        for match in compactClockRegex.matches(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)) {
             guard let hourRange = Range(match.range(at: 1), in: normalized),
                   let minuteRange = Range(match.range(at: 2), in: normalized),
                   let hour = Int(normalized[hourRange]),

@@ -44,18 +44,10 @@ extension AppModel {
 
         Task {
             do {
-                let result = try await calendarSyncEngine.sync(
+                let result = try await performSync(
                     sources: enabledSources,
-                    workdayHours: WorkdayHours(
-                        start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                        end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ),
                     upcomingOnly: ui.upcomingOnly,
-                    previewOnly: true,
-                    parserMode: ui.parserMode,
-                    aiConfiguration: resolvedAIConfiguration,
-                    aiApprovals: ui.aiApprovals,
-                    schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
+                    previewOnly: true
                 )
                 ui.output = result.outputText
                 ui.pendingAIReviews = pendingReviews(from: result.reports)
@@ -147,18 +139,10 @@ extension AppModel {
 
         Task {
             do {
-                let result = try await calendarSyncEngine.sync(
+                let result = try await performSync(
                     sources: enabledSources,
-                    workdayHours: WorkdayHours(
-                        start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                        end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ),
                     upcomingOnly: ui.upcomingOnly,
-                    previewOnly: true,
-                    parserMode: ui.parserMode,
-                    aiConfiguration: resolvedAIConfiguration,
-                    aiApprovals: ui.aiApprovals,
-                    schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
+                    previewOnly: true
                 )
                 ui.output = result.outputText
                 ui.pendingAIReviews = pendingReviews(from: result.reports)

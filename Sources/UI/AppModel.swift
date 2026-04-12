@@ -23,7 +23,7 @@ final class AppModel: ObservableObject {
         var initialDraftName = ""
         var initialDraftSource = ""
         var initialDraftBookingID = ""
-        var initialDraftCalendar = "Experiment"
+        var initialDraftCalendar = defaultCalendarName
 
         if let lastDraft = settings.lastDraft {
             initialSelectedSourceID = lastDraft.selectedSourceID
