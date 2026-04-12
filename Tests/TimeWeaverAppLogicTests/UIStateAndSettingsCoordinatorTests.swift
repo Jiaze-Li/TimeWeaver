@@ -1,6 +1,7 @@
 import XCTest
 @testable import TimeWeaverAppLogic
 
+@MainActor
 final class UIStateAndSettingsCoordinatorTests: XCTestCase {
     func testUIStateInitialSeedsExpectedDefaults() {
         let source = SourceItem(name: "ppms", source: "sheet", bookingID: "LJZ", calendar: "Experiment")

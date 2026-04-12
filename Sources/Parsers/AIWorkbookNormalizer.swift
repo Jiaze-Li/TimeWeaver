@@ -198,7 +198,7 @@ struct AIWorkbookNormalizer {
             workdayHours: workdayHours,
             timeZone: timeZone
         )
-        guard configuration.provider != .gemini, configuration.provider != .kimi, !initial.occurrences.isEmpty else {
+        guard configuration.provider != .gemini, configuration.provider != .kimi, configuration.provider != .anthropic, !initial.occurrences.isEmpty else {
             return applyImageProviderPolicy(to: initial, provider: configuration.provider)
         }
 
@@ -831,8 +831,10 @@ struct AIWorkbookNormalizer {
         switch provider {
         case .kimi:
             policyNote = "Kimi image parsing is still experimental. Review the extracted lessons before syncing."
-        case .openAI, .anthropic, .openRouter, .custom:
-            policyNote = "\(provider.title) image parsing should be reviewed before syncing. Gemini is currently the most reliable choice for uploaded timetable images."
+        case .anthropic:
+            policyNote = "Anthropic image parsing should be reviewed before syncing."
+        case .openAI, .openRouter, .custom:
+            policyNote = "\(provider.title) image parsing should be reviewed before syncing. Gemini or Anthropic is recommended for uploaded timetable images."
         case .deepSeek:
             policyNote = "This AI platform does not support image parsing in the current app flow."
         case .gemini:
@@ -1344,9 +1346,10 @@ struct AIWorkbookNormalizer {
 
         let systemPrompt = """
         \(instructions)
-        Return valid JSON only. Do not wrap the answer in markdown.
+        Return valid JSON only. Do not wrap the answer in markdown or code fences.
         The JSON must match this schema exactly:
         \(schemaText)
+        Think step by step: first identify the booking ID in the source, then locate all matching reservations, then construct the JSON.
         """
 
         var userContent: [[String: Any]] = [
@@ -1368,12 +1371,17 @@ struct AIWorkbookNormalizer {
 
         let body: [String: Any] = [
             "model": configuration.model,
-            "max_tokens": 4096,
+            "max_tokens": 8192,
+            "temperature": 0,
             "system": systemPrompt,
             "messages": [
                 [
                     "role": "user",
                     "content": userContent
+                ],
+                [
+                    "role": "assistant",
+                    "content": "{\"parser_summary\":"
                 ]
             ]
         ]
@@ -1384,6 +1392,10 @@ struct AIWorkbookNormalizer {
             .filter { $0.type == "text" }
             .compactMap(\.text)
             .joined(separator: "\n")
+        let prefilled = "{\"parser_summary\":" + content
+        if let payloadText = extractJSONText(from: prefilled) {
+            return payloadText
+        }
         if let payloadText = extractJSONText(from: content) {
             return payloadText
         }
@@ -1497,6 +1509,7 @@ struct AIWorkbookNormalizer {
         request.httpMethod = "POST"
         request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("prompt-caching-2024-07-31", forHTTPHeaderField: "anthropic-beta")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = bodyData
         request.timeoutInterval = 90

@@ -7,13 +7,14 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     @Published var ui: UIState
 
-    let calendarSyncEngine = CalendarSyncEngine()
+    let calendarSyncEngine: CalendarSyncEngine
     let settingsCoordinator = SettingsCoordinator()
     let launchAutomation = LaunchAutomation.load()
     var timer: Timer?
     var persistTask: Task<Void, Never>?
 
-    init() {
+    init(calendarSyncEngine: CalendarSyncEngine = CalendarSyncEngine()) {
+        self.calendarSyncEngine = calendarSyncEngine
         let settings = settingsCoordinator.loadSettings()
         var initialSources = settings.sources
 

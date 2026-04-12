@@ -27,6 +27,7 @@ let package = Package(
         // are intentionally excluded so this target remains testable without a display.
         .target(
             name: "TimeWeaverAppLogic",
+            dependencies: ["TimeWeaverCore"],
             path: "Sources",
             sources: [
                 "Models/AppIdentity.swift",

@@ -1,11 +1,12 @@
 import Foundation
 
+@MainActor
 final class SettingsCoordinator {
     private let loadSettingsImpl: () -> AppSettings
     private let loadAIAPIKeyImpl: () -> String
-    private let saveAIAPIKeyImpl: (String) -> Void
-    private let saveSettingsImpl: (AppSettings) -> Void
-    private let persistExecutor: (@escaping () -> Void) -> Void
+    private let saveAIAPIKeyImpl: @Sendable (String) -> Void
+    private let saveSettingsImpl: @Sendable (AppSettings) -> Void
+    private let persistExecutor: (@escaping @Sendable () -> Void) -> Void
 
     private var lastPersistedSettingsData = Data()
     private var lastPersistedAIAPIKey = ""
@@ -13,9 +14,9 @@ final class SettingsCoordinator {
     init(
         loadSettings: @escaping () -> AppSettings = { SettingsStore.loadSettings() },
         loadAIAPIKey: @escaping () -> String = { KeychainStore.loadAIAPIKey() },
-        saveAIAPIKey: @escaping (String) -> Void = { KeychainStore.saveAIAPIKey($0) },
-        saveSettings: @escaping (AppSettings) -> Void = { SettingsStore.saveSettings($0) },
-        persistExecutor: @escaping (@escaping () -> Void) -> Void = { work in
+        saveAIAPIKey: @escaping @Sendable (String) -> Void = { KeychainStore.saveAIAPIKey($0) },
+        saveSettings: @escaping @Sendable (AppSettings) -> Void = { SettingsStore.saveSettings($0) },
+        persistExecutor: @escaping (@escaping @Sendable () -> Void) -> Void = { work in
             Task.detached(priority: .utility) {
                 work()
             }
@@ -42,9 +43,11 @@ final class SettingsCoordinator {
         }
         lastPersistedSettingsData = encodedData
         lastPersistedAIAPIKey = aiAPIKey
-        persistExecutor { [saveAIAPIKeyImpl, saveSettingsImpl] in
-            saveAIAPIKeyImpl(aiAPIKey)
-            saveSettingsImpl(settings)
+        let saveAIAPIKey = saveAIAPIKeyImpl
+        let saveSettings = saveSettingsImpl
+        persistExecutor {
+            saveAIAPIKey(aiAPIKey)
+            saveSettings(settings)
         }
     }
 }
