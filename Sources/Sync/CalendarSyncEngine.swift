@@ -64,7 +64,7 @@ private struct ReservationExtractor {
             )
         }
 
-        let ruleOccurrences = try extractRuleOccurrences(
+        let ruleOccurrences = try Self.extractRuleOccurrences(
             source: source,
             workdayHours: workdayHours,
             sheets: parsedSheets,
@@ -722,7 +722,7 @@ actor CalendarSyncEngine {
             let customURL = URL(string: "ppms-sync://event/\(event.syncKey)")!
             let existingRecord = state.events[event.syncKey]
             let existingEvent = findExistingEvent(for: event, stateRecord: existingRecord, calendar: calendar, customURL: customURL)
-            let target = existingEvent ?? EKEvent(eventStore: store)
+            let target = existingEvent ?? store.makeEvent()
             let oldSignature = existingEvent.map(eventSignature) ?? ""
 
             let resolvedTitle = titleOverrides[event.start] ?? event.sourceName
@@ -912,7 +912,7 @@ actor CalendarSyncEngine {
                   let start = parseFlexibleISO8601(stored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(stored.endISO, timeZone: timeZone),
                   let customURL = URL(string: "ppms-sync://event/\(key)") else { continue }
-            let event = EKEvent(eventStore: store)
+            let event = store.makeEvent()
             event.calendar = calendar
             event.title = stored.title
             event.startDate = start
@@ -948,7 +948,7 @@ actor CalendarSyncEngine {
                 removedCount += 1
                 continue
             }
-            let event = EKEvent(eventStore: store)
+            let event = store.makeEvent()
             event.calendar = calendar
             event.title = oldStored.title
             event.startDate = start

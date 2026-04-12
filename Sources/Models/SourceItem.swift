@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(TimeWeaverCore)
 import TimeWeaverCore
+#endif
 
 struct SourceItem: Codable, Identifiable, Equatable {
     var id: UUID = UUID()

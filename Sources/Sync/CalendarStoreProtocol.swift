@@ -8,9 +8,14 @@ protocol CalendarStoreProtocol {
     func events(matching predicate: NSPredicate) -> [EKEvent]
     func save(_ event: EKEvent, span: EKSpan, commit: Bool) throws
     func remove(_ event: EKEvent, span: EKSpan, commit: Bool) throws
+    func makeEvent() -> EKEvent
     @available(macOS 14.0, *)
     func requestFullAccessToEvents() async throws -> Bool
     func requestAccess(to entityType: EKEntityType, completion: @escaping (Bool, (any Error)?) -> Void)
 }
 
-extension EKEventStore: CalendarStoreProtocol {}
+extension EKEventStore: CalendarStoreProtocol {
+    func makeEvent() -> EKEvent {
+        EKEvent(eventStore: self)
+    }
+}
