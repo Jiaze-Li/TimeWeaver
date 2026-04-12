@@ -1272,9 +1272,11 @@ struct AIWorkbookNormalizer {
         normalizationCacheLock.lock()
         defer { normalizationCacheLock.unlock() }
 
+        let now = Date()
+        normalizationCache = normalizationCache.filter { $0.value.expiresAt > now }
         normalizationCache[workbookFingerprint] = CachedAINormalizationResult(
             result: result,
-            expiresAt: Date().addingTimeInterval(normalizationCacheTTL)
+            expiresAt: now.addingTimeInterval(normalizationCacheTTL)
         )
     }
 
