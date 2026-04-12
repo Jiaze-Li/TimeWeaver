@@ -7,13 +7,14 @@ import UniformTypeIdentifiers
 final class AppModel: ObservableObject {
     @Published var ui: UIState
 
-    let calendarSyncEngine = CalendarSyncEngine()
+    let calendarSyncEngine: CalendarSyncEngine
     let settingsCoordinator = SettingsCoordinator()
     let launchAutomation = LaunchAutomation.load()
     var timer: Timer?
     var persistTask: Task<Void, Never>?
 
-    init() {
+    init(calendarSyncEngine: CalendarSyncEngine = CalendarSyncEngine()) {
+        self.calendarSyncEngine = calendarSyncEngine
         let settings = settingsCoordinator.loadSettings()
         var initialSources = settings.sources
 
@@ -22,7 +23,7 @@ final class AppModel: ObservableObject {
         var initialDraftName = ""
         var initialDraftSource = ""
         var initialDraftBookingID = ""
-        var initialDraftCalendar = "Experiment"
+        var initialDraftCalendar = defaultCalendarName
 
         if let lastDraft = settings.lastDraft {
             initialSelectedSourceID = lastDraft.selectedSourceID

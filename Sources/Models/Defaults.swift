@@ -1,6 +1,8 @@
 import Foundation
 
 let defaultSchedulingTimeZoneIdentifier = "Asia/Singapore"
+let defaultBookingID = "LJZ"
+let defaultCalendarName = "Experiment"
 
 func builtinSlotRules() -> [SlotRule] {
     [
@@ -19,8 +21,8 @@ func defaultSources() -> [SourceItem] {
         SourceItem(
             name: "ppms",
             source: "https://docs.google.com/spreadsheets/d/1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg/edit?usp=sharing",
-            bookingID: "LJZ",
-            calendar: "Experiment"
+            bookingID: defaultBookingID,
+            calendar: defaultCalendarName
         )
     ]
 }

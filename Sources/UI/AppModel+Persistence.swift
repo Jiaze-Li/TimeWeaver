@@ -31,10 +31,7 @@ extension AppModel {
     func settingsSnapshot() -> (settings: AppSettings, data: Data) {
         let settings = AppSettings(
             sources: ui.sources,
-            workdayHours: WorkdayHours(
-                start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-            ),
+            workdayHours: resolvedWorkdayHours,
             schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
             autoSyncEnabled: ui.autoSyncEnabled,
             autoSyncMinutes: max(Int(ui.autoSyncMinutes) ?? 15, 1),
@@ -93,6 +90,33 @@ extension AppModel {
                 ui.sourceStatuses[report.sourceItemID] = .success(matchCount: report.totalMatchedCount)
             }
         }
+    }
+
+    var resolvedWorkdayHours: WorkdayHours {
+        WorkdayHours(
+            start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
+            end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+    }
+
+    func performSync(
+        sources: [SourceItem],
+        upcomingOnly: Bool,
+        previewOnly: Bool,
+        aiApprovals: [AIApprovalRecord]? = nil,
+        titleOverrides: [Date: String] = [:]
+    ) async throws -> SyncRunResult {
+        try await calendarSyncEngine.sync(
+            sources: sources,
+            workdayHours: resolvedWorkdayHours,
+            upcomingOnly: upcomingOnly,
+            previewOnly: previewOnly,
+            parserMode: ui.parserMode,
+            aiConfiguration: resolvedAIConfiguration,
+            aiApprovals: aiApprovals ?? ui.aiApprovals,
+            schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
+            titleOverrides: titleOverrides
+        )
     }
 
     var resolvedAIConfiguration: AIServiceConfiguration? {

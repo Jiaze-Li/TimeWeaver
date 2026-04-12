@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(TimeWeaverCore)
+import TimeWeaverCore
+#endif
 
 struct SourceItem: Codable, Identifiable, Equatable {
     var id: UUID = UUID()
@@ -9,12 +12,7 @@ struct SourceItem: Codable, Identifiable, Equatable {
     var calendar: String
 }
 
-struct SlotRule: Codable, Equatable {
-    var sheetLabel: String
-    var start: String
-    var end: String
-    var endsNextDay: Bool
-}
+typealias SlotRule = TimeWeaverCore.SlotRule
 
 struct WorkdayHours: Codable, Equatable {
     var start: String

@@ -10,9 +10,9 @@ extension AppModel {
             do {
                 let values = try await calendarSyncEngine.calendarNames()
                 ui.calendarAccessState = .granted
-                ui.calendars = values.isEmpty ? ["Experiment"] : values
+                ui.calendars = values.isEmpty ? [defaultCalendarName] : values
                 if !ui.calendars.contains(ui.draftCalendar) {
-                    ui.draftCalendar = ui.calendars.first ?? "Experiment"
+                    ui.draftCalendar = ui.calendars.first ?? defaultCalendarName
                 }
                 ui.output = ""
                 ui.status = values.isEmpty ? "No calendars found in Apple Calendar" : "Calendars loaded"
@@ -48,7 +48,7 @@ extension AppModel {
         ui.draftName = ""
         ui.draftSource = ""
         ui.draftBookingID = ""
-        ui.draftCalendar = ui.calendars.first ?? "Experiment"
+        ui.draftCalendar = ui.calendars.first ?? defaultCalendarName
         ui.status = "Editing a new source. Fill the fields and click Save."
         schedulePersist()
     }

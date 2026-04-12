@@ -2,7 +2,10 @@ import Foundation
 import EventKit
 
 private struct ReservationExtractor {
-    static func extract(
+    let aiNormalizer: AIWorkbookNormalizerProtocol
+    let localImageParser: LocalImageParserProtocol
+
+    func extract(
         source: SourceItem,
         workdayHours: WorkdayHours,
         upcomingOnly: Bool,
@@ -61,7 +64,7 @@ private struct ReservationExtractor {
             )
         }
 
-        let ruleOccurrences = try extractRuleOccurrences(
+        let ruleOccurrences = try Self.extractRuleOccurrences(
             source: source,
             workdayHours: workdayHours,
             sheets: parsedSheets,
@@ -104,7 +107,7 @@ private struct ReservationExtractor {
         )
     }
 
-    private static func extractImageSource(
+    private func extractImageSource(
         source: SourceItem,
         workdayHours: WorkdayHours,
         upcomingOnly: Bool,
@@ -114,7 +117,7 @@ private struct ReservationExtractor {
         timeZone: TimeZone,
         referenceDate: Date
     ) async throws -> ExtractionResult {
-        if let localResult = try LocalTimetableImageParser.parse(
+        if let localResult = try localImageParser.parse(
             source: source,
             workdayHours: workdayHours,
             imageURL: imageURL,
@@ -151,7 +154,7 @@ private struct ReservationExtractor {
         guard aiConfiguration.provider.supportsImageParsing else {
             throw AppFailure.invalidAIConfiguration("The selected AI platform does not support image parsing yet. Use a platform marked '(images)' for image sources.")
         }
-        let normalized = try await AIWorkbookNormalizer.normalizeImage(
+        let normalized = try await aiNormalizer.normalizeImage(
             source: source,
             workdayHours: workdayHours,
             imageURL: imageURL,
@@ -180,7 +183,7 @@ private struct ReservationExtractor {
         )
     }
 
-    private static func chooseOccurrences(
+    private func chooseOccurrences(
         source: SourceItem,
         workdayHours: WorkdayHours,
         parserMode: ParserMode,
@@ -230,7 +233,7 @@ private struct ReservationExtractor {
             guard let aiConfiguration else {
                 throw AppFailure.invalidAIConfiguration("AI parser is enabled but not configured.")
             }
-            let normalized = try await AIWorkbookNormalizer.normalize(
+            let normalized = try await aiNormalizer.normalize(
                 source: source,
                 workdayHours: workdayHours,
                 sheets: parsedSheets,
@@ -250,7 +253,7 @@ private struct ReservationExtractor {
             guard let aiConfiguration else {
                 throw AppFailure.invalidAIConfiguration("Set an endpoint URL, model, and API key before using AI mode.")
             }
-            let normalized = try await AIWorkbookNormalizer.normalize(
+            let normalized = try await aiNormalizer.normalize(
                 source: source,
                 workdayHours: workdayHours,
                 sheets: parsedSheets,
@@ -472,95 +475,7 @@ private struct ReservationExtractor {
     }
 
     private static func inferredSlotRule(from label: String) -> SlotRule? {
-        let normalized = label
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
-        guard !normalized.isEmpty else { return nil }
-
-        if let builtin = builtinSlotRules().first(where: {
-            $0.sheetLabel.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == normalized
-        }) {
-            return builtin
-        }
-
-        guard let range = parseSlotRange(from: normalized) else {
-            return nil
-        }
-        return SlotRule(
-            sheetLabel: label,
-            start: range.start,
-            end: range.end,
-            endsNextDay: range.endsNextDay
-        )
-    }
-
-    private static func parseSlotRange(from label: String) -> (start: String, end: String, endsNextDay: Bool)? {
-        let normalized = label
-            .replacingOccurrences(of: "–", with: "-")
-            .replacingOccurrences(of: "—", with: "-")
-            .replacingOccurrences(of: " to ", with: "-")
-            .replacingOccurrences(of: " ", with: "")
-        let parts = normalized.split(separator: "-", maxSplits: 1).map(String.init)
-        guard parts.count == 2,
-              let startCandidates = resolvedTimeCandidates(from: parts[0]),
-              let endCandidates = resolvedTimeCandidates(from: parts[1]) else {
-            return nil
-        }
-
-        let best = startCandidates.flatMap { start in
-            endCandidates.map { end -> (start: Int, end: Int, duration: Int) in
-                let duration = end > start ? end - start : (24 * 60 - start) + end
-                return (start: start, end: end, duration: duration)
-            }
-        }
-        .filter { $0.duration > 0 }
-        .sorted {
-            if ($0.duration <= 16 * 60) != ($1.duration <= 16 * 60) {
-                return $0.duration <= 16 * 60
-            }
-            return $0.duration < $1.duration
-        }
-        .first
-
-        guard let best else { return nil }
-        return (
-            start: clockString(fromMinutes: best.start),
-            end: clockString(fromMinutes: best.end),
-            endsNextDay: best.end <= best.start
-        )
-    }
-
-    private static func resolvedTimeCandidates(from token: String) -> [Int]? {
-        let pattern = #"^(\d{1,2})(?::(\d{2}))?([ap]m)?$"#
-        let regex = try! NSRegularExpression(pattern: pattern)
-        guard let match = regex.firstMatch(in: token, range: NSRange(token.startIndex..., in: token)),
-              let hourRange = Range(match.range(at: 1), in: token) else {
-            return nil
-        }
-        let minuteRange = Range(match.range(at: 2), in: token)
-        let meridiemRange = Range(match.range(at: 3), in: token)
-
-        guard let hour = Int(token[hourRange]) else { return nil }
-        let minute = minuteRange.flatMap { Int(token[$0]) } ?? 0
-        guard (0...59).contains(minute) else { return nil }
-
-        if let meridiemRange {
-            let meridiem = token[meridiemRange]
-            guard (1...12).contains(hour) else { return nil }
-            let normalizedHour: Int
-            if meridiem == "am" {
-                normalizedHour = hour == 12 ? 0 : hour
-            } else {
-                normalizedHour = hour == 12 ? 12 : hour + 12
-            }
-            return [normalizedHour * 60 + minute]
-        }
-
-        guard (0...23).contains(hour) else { return nil }
-        if hour == 0 || hour >= 13 {
-            return [hour * 60 + minute]
-        }
-        return [hour * 60 + minute, (hour + 12) * 60 + minute]
+        TimeWeaverCore.inferredSlotRule(from: label, builtinRules: builtinSlotRules())
     }
 
     private static func mergeOccurrences(occurrences: [SlotOccurrence], source: SourceItem) -> [ReservationEvent] {
@@ -614,7 +529,22 @@ private func futureOnlyEvents(
 }
 
 actor CalendarSyncEngine {
-    private let store = EKEventStore()
+    private let store: CalendarStoreProtocol
+    private let stateStore: SyncStateStoreProtocol
+    private let aiNormalizer: AIWorkbookNormalizerProtocol
+    private let localImageParser: LocalImageParserProtocol
+
+    init(
+        store: CalendarStoreProtocol = EKEventStore(),
+        stateStore: SyncStateStoreProtocol = DefaultSyncStateStore(),
+        aiNormalizer: AIWorkbookNormalizerProtocol = DefaultAIWorkbookNormalizer(),
+        localImageParser: LocalImageParserProtocol = DefaultLocalImageParser()
+    ) {
+        self.store = store
+        self.stateStore = stateStore
+        self.aiNormalizer = aiNormalizer
+        self.localImageParser = localImageParser
+    }
 
     func calendarAccessState() -> CalendarAccessState {
         currentCalendarAccessState()
@@ -654,13 +584,17 @@ actor CalendarSyncEngine {
         try await ensureAccess()
         let schedulingTimeZone = TimeZone(identifier: schedulingTimeZoneIdentifier) ?? .current
         let referenceDate = Date()
-        var state = SettingsStore.loadState()
+        var state = stateStore.loadState()
         var reports: [SourceSyncReport] = []
         var lines: [String] = []
 
         for source in sources where source.enabled {
             do {
-                let extraction = try await ReservationExtractor.extract(
+                let extractor = ReservationExtractor(
+                    aiNormalizer: aiNormalizer,
+                    localImageParser: localImageParser
+                )
+                let extraction = try await extractor.extract(
                     source: source,
                     workdayHours: workdayHours,
                     upcomingOnly: upcomingOnly,
@@ -752,7 +686,7 @@ actor CalendarSyncEngine {
         }
 
         if !previewOnly {
-            SettingsStore.saveState(state)
+            stateStore.saveState(state)
         }
         return SyncRunResult(reports: reports, outputText: lines.joined(separator: "\n"))
     }
@@ -788,7 +722,7 @@ actor CalendarSyncEngine {
             let customURL = URL(string: "ppms-sync://event/\(event.syncKey)")!
             let existingRecord = state.events[event.syncKey]
             let existingEvent = findExistingEvent(for: event, stateRecord: existingRecord, calendar: calendar, customURL: customURL)
-            let target = existingEvent ?? EKEvent(eventStore: store)
+            let target = existingEvent ?? store.makeEvent()
             let oldSignature = existingEvent.map(eventSignature) ?? ""
 
             let resolvedTitle = titleOverrides[event.start] ?? event.sourceName
@@ -843,7 +777,7 @@ actor CalendarSyncEngine {
                 trackedStartISO: value.startISO,
                 upcomingOnly: upcomingOnly,
                 now: Date(),
-                timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current
+                timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current
             ) else { return nil }
             return DeleteCandidate(
                 syncKey: key,
@@ -862,8 +796,8 @@ actor CalendarSyncEngine {
                 }
                 state.events.removeValue(forKey: candidate.syncKey)
             }
-            if let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current),
-               let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current) {
+            if let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current),
+               let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current) {
                 actions.append(
                     EventAction(
                         status: previewOnly ? "would delete" : "deleted",
@@ -913,8 +847,8 @@ actor CalendarSyncEngine {
             return item
         }
 
-        guard let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current),
-              let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: "Asia/Singapore") ?? .current) else {
+        guard let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current),
+              let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current) else {
             return nil
         }
         let predicate = store.predicateForEvents(
@@ -948,7 +882,7 @@ actor CalendarSyncEngine {
             throw AppFailure.calendarNotFound(record.calendarName)
         }
 
-        var state = SettingsStore.loadState()
+        var state = stateStore.loadState()
 
         let beforeKeys = Set(record.beforeSnapshot.keys)
         let afterKeys = Set(record.afterSnapshot.keys)
@@ -978,7 +912,7 @@ actor CalendarSyncEngine {
                   let start = parseFlexibleISO8601(stored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(stored.endISO, timeZone: timeZone),
                   let customURL = URL(string: "ppms-sync://event/\(key)") else { continue }
-            let event = EKEvent(eventStore: store)
+            let event = store.makeEvent()
             event.calendar = calendar
             event.title = stored.title
             event.startDate = start
@@ -1014,7 +948,7 @@ actor CalendarSyncEngine {
                 removedCount += 1
                 continue
             }
-            let event = EKEvent(eventStore: store)
+            let event = store.makeEvent()
             event.calendar = calendar
             event.title = oldStored.title
             event.startDate = start
@@ -1034,7 +968,7 @@ actor CalendarSyncEngine {
             restoredCount += 1
         }
 
-        SettingsStore.saveState(state)
+        stateStore.saveState(state)
 
         var parts: [String] = ["Import undone."]
         if removedCount > 0 {

@@ -75,7 +75,9 @@ enum AIProvider: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .gemini:
             return "\(title) (images, recommended)"
-        case .openAI, .anthropic, .openRouter:
+        case .anthropic:
+            return "\(title) (images, recommended)"
+        case .openAI, .openRouter:
             return "\(title) \(supportsImageParsing ? "(images, review)" : "(text only)")"
         case .kimi:
             return "\(title) (images, experimental)"
@@ -95,7 +97,7 @@ enum AIProvider: String, Codable, CaseIterable, Identifiable {
         case .kimi:
             return "Built-in setup for Moonshot Kimi chat completions. Text uses the standard model and image sources automatically switch to the built-in vision model."
         case .anthropic:
-            return "Built-in setup for Anthropic Messages API."
+            return "Built-in setup for Anthropic Messages API. Optimized with response prefilling and prompt caching."
         case .gemini:
             return "Built-in setup for Gemini generateContent."
         case .openRouter:
@@ -192,7 +194,7 @@ let defaultKimiEndpointURL = "https://api.moonshot.cn/v1/chat/completions"
 let defaultKimiModel = "moonshot-v1-8k"
 let defaultKimiImageModel = "moonshot-v1-8k-vision-preview"
 let defaultAnthropicEndpointURL = "https://api.anthropic.com/v1/messages"
-let defaultAnthropicModel = "claude-sonnet-4-20250514"
+let defaultAnthropicModel = "claude-sonnet-4-6"
 let defaultGeminiEndpointURL = "https://generativelanguage.googleapis.com/v1beta/models"
 let defaultGeminiModel = "gemini-2.5-flash"
 let defaultOpenRouterEndpointURL = "https://openrouter.ai/api/v1/chat/completions"
@@ -233,11 +235,33 @@ enum AIRequestStyle {
     case geminiGenerateContent
 }
 
+struct AIFallbackServiceConfiguration {
+    var provider: AIProvider
+    var endpointURL: URL
+    var apiKey: String
+    var model: String
+
+    func resolvedModel(forImageParsing: Bool) -> String {
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedModel.isEmpty {
+            return normalizedModel
+        }
+        return forImageParsing ? provider.automaticImageModel : provider.automaticSheetModel
+    }
+
+    func configurationForRequest(isImageParsing: Bool) -> AIFallbackServiceConfiguration {
+        var adjusted = self
+        adjusted.model = resolvedModel(forImageParsing: isImageParsing)
+        return adjusted
+    }
+}
+
 struct AIServiceConfiguration {
     var provider: AIProvider
     var endpointURL: URL
     var apiKey: String
     var model: String
+    var fallbackProvider: AIFallbackServiceConfiguration? = nil
 
     var requestStyle: AIRequestStyle {
         switch provider {

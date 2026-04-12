@@ -14,9 +14,9 @@ private let monthAliases: [String: Int] = [
     "november": 11, "nov": 11,
     "december": 12, "dec": 12
 ]
+private let yearRegex = try! NSRegularExpression(pattern: "(20\\d{2})")
 
 func parseMonthSheet(_ title: String) -> (Int, Int)? {
-    let yearRegex = try! NSRegularExpression(pattern: "(20\\d{2})")
     guard let match = yearRegex.firstMatch(in: title, range: NSRange(title.startIndex..., in: title)),
           let range = Range(match.range(at: 1), in: title),
           let year = Int(title[range]) else { return nil }

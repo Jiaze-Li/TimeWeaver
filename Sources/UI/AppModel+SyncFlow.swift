@@ -60,18 +60,10 @@ extension AppModel {
 
         Task {
             do {
-                let result = try await calendarSyncEngine.sync(
+                let result = try await performSync(
                     sources: enabledSources,
-                    workdayHours: WorkdayHours(
-                        start: ui.workdayStart.trimmingCharacters(in: .whitespacesAndNewlines),
-                        end: ui.workdayEnd.trimmingCharacters(in: .whitespacesAndNewlines)
-                    ),
                     upcomingOnly: ui.upcomingOnly,
-                    previewOnly: previewOnly,
-                    parserMode: ui.parserMode,
-                    aiConfiguration: resolvedAIConfiguration,
-                    aiApprovals: ui.aiApprovals,
-                    schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
+                    previewOnly: previewOnly
                 )
                 if previewOnly {
                     ui.output = result.outputText
@@ -114,9 +106,9 @@ extension AppModel {
 
     func applyLoadedCalendars(_ values: [String], statusMessage: String) {
         ui.calendarAccessState = .granted
-        ui.calendars = values.isEmpty ? ["Experiment"] : values
+        ui.calendars = values.isEmpty ? [defaultCalendarName] : values
         if !ui.calendars.contains(ui.draftCalendar) {
-            ui.draftCalendar = ui.calendars.first ?? "Experiment"
+            ui.draftCalendar = ui.calendars.first ?? defaultCalendarName
         }
         ui.output = ""
         ui.status = statusMessage

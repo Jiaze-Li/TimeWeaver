@@ -95,7 +95,8 @@ final class KeychainStore {
 }
 
 final class SettingsStore {
-    private static var migrationChecked = false
+    // Only accessed during app launch from the main thread via ensureStorageReady().
+    private nonisolated(unsafe) static var migrationChecked = false
 
     private static func ensureStorageReady() throws {
         if !migrationChecked {

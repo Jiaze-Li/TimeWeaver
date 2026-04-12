@@ -1,5 +1,7 @@
 import Foundation
 
+private let googleSheetsIDRegex = try! NSRegularExpression(pattern: #"/d/([a-zA-Z0-9-_]+)"#)
+
 func normalizeWorkbookPath(_ target: String) -> String {
     if target.hasPrefix("xl/") {
         return target
@@ -49,9 +51,7 @@ func downloadWorkbook(from source: String) async throws -> URL {
 
     let downloadURL: URL
     if source.contains("docs.google.com/spreadsheets") {
-        let pattern = "/d/([a-zA-Z0-9-_]+)"
-        let regex = try! NSRegularExpression(pattern: pattern)
-        guard let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+        guard let match = googleSheetsIDRegex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
               let range = Range(match.range(at: 1), in: source) else {
             throw AppFailure.invalidSource
         }
@@ -66,7 +66,7 @@ func downloadWorkbook(from source: String) async throws -> URL {
         throw AppFailure.unsupportedSource(source)
     }
 
-    let configuration = URLSessionConfiguration.ephemeral
+    let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = 30
     configuration.timeoutIntervalForResource = 60
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
