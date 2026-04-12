@@ -1665,7 +1665,7 @@ struct AIWorkbookNormalizer {
         request.httpBody = bodyData
         request.timeoutInterval = 90
 
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        let sessionConfiguration = URLSessionConfiguration.default
         sessionConfiguration.timeoutIntervalForRequest = 90
         sessionConfiguration.timeoutIntervalForResource = 120
         let session = URLSession(configuration: sessionConfiguration)
@@ -1696,7 +1696,7 @@ struct AIWorkbookNormalizer {
         request.httpBody = bodyData
         request.timeoutInterval = 90
 
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        let sessionConfiguration = URLSessionConfiguration.default
         sessionConfiguration.timeoutIntervalForRequest = 90
         sessionConfiguration.timeoutIntervalForResource = 120
         let session = URLSession(configuration: sessionConfiguration)
@@ -1725,7 +1725,7 @@ struct AIWorkbookNormalizer {
         request.httpBody = bodyData
         request.timeoutInterval = 90
 
-        let sessionConfiguration = URLSessionConfiguration.ephemeral
+        let sessionConfiguration = URLSessionConfiguration.default
         sessionConfiguration.timeoutIntervalForRequest = 90
         sessionConfiguration.timeoutIntervalForResource = 120
         let session = URLSession(configuration: sessionConfiguration)

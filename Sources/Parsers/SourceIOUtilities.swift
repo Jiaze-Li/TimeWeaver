@@ -66,7 +66,7 @@ func downloadWorkbook(from source: String) async throws -> URL {
         throw AppFailure.unsupportedSource(source)
     }
 
-    let configuration = URLSessionConfiguration.ephemeral
+    let configuration = URLSessionConfiguration.default
     configuration.timeoutIntervalForRequest = 30
     configuration.timeoutIntervalForResource = 60
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
