@@ -76,4 +76,151 @@ final class AppSettingsRoundtripTests: XCTestCase {
         XCTAssertEqual(a, b)
         XCTAssertNotEqual(a, c)
     }
+
+    // MARK: - AIServiceConfiguration
+
+    func testAIServiceConfigurationRequestStyle() {
+        let makeConfig = { (provider: AIProvider) -> AIServiceConfiguration in
+            AIServiceConfiguration(
+                provider: provider,
+                endpointURL: URL(string: provider.defaultEndpointURL)!,
+                apiKey: "test",
+                model: provider.defaultModel
+            )
+        }
+        XCTAssertEqual(makeConfig(.openAI).requestStyle, .responses)
+        XCTAssertEqual(makeConfig(.anthropic).requestStyle, .anthropicMessages)
+        XCTAssertEqual(makeConfig(.gemini).requestStyle, .geminiGenerateContent)
+        XCTAssertEqual(makeConfig(.deepSeek).requestStyle, .chatCompletions)
+        XCTAssertEqual(makeConfig(.kimi).requestStyle, .chatCompletions)
+        XCTAssertEqual(makeConfig(.openRouter).requestStyle, .chatCompletions)
+    }
+
+    func testAIServiceConfigurationResolvedModel() {
+        let config = AIServiceConfiguration(
+            provider: .anthropic,
+            endpointURL: URL(string: "https://api.anthropic.com/v1/messages")!,
+            apiKey: "test",
+            model: ""
+        )
+        XCTAssertEqual(config.resolvedModel(forImageParsing: false), "claude-sonnet-4-6")
+        XCTAssertEqual(config.resolvedModel(forImageParsing: true), "claude-sonnet-4-6")
+    }
+
+    func testAIServiceConfigurationManualModelOverride() {
+        let config = AIServiceConfiguration(
+            provider: .anthropic,
+            endpointURL: URL(string: "https://api.anthropic.com/v1/messages")!,
+            apiKey: "test",
+            model: "claude-opus-4-6"
+        )
+        XCTAssertEqual(config.resolvedModel(forImageParsing: false), "claude-opus-4-6")
+        XCTAssertEqual(config.resolvedModel(forImageParsing: true), "claude-opus-4-6")
+    }
+
+    func testCustomProviderRequestStyleInference() {
+        let chatConfig = AIServiceConfiguration(
+            provider: .custom,
+            endpointURL: URL(string: "https://my-proxy.com/v1/chat/completions")!,
+            apiKey: "test",
+            model: "custom-model"
+        )
+        XCTAssertEqual(chatConfig.requestStyle, .chatCompletions)
+
+        let anthropicConfig = AIServiceConfiguration(
+            provider: .custom,
+            endpointURL: URL(string: "https://proxy.anthropic.com/v1/messages")!,
+            apiKey: "test",
+            model: "custom-model"
+        )
+        XCTAssertEqual(anthropicConfig.requestStyle, .anthropicMessages)
+
+        let geminiConfig = AIServiceConfiguration(
+            provider: .custom,
+            endpointURL: URL(string: "https://generativelanguage.googleapis.com/v1beta/models")!,
+            apiKey: "test",
+            model: "custom-model"
+        )
+        XCTAssertEqual(geminiConfig.requestStyle, .geminiGenerateContent)
+    }
+
+    // MARK: - AIParserSettings decode inference
+
+    func testAIParserSettingsInfersProviderFromEndpoint() throws {
+        let json = """
+        {"endpointURL": "https://api.anthropic.com/v1/messages", "model": "claude-sonnet-4-6"}
+        """
+        let decoded = try JSONDecoder().decode(AIParserSettings.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.provider, .anthropic)
+        XCTAssertEqual(decoded.endpointURL, "https://api.anthropic.com/v1/messages")
+        XCTAssertEqual(decoded.model, "claude-sonnet-4-6")
+    }
+
+    func testAIParserSettingsDefaultsEmptyEndpoint() throws {
+        let json = """
+        {"provider": "gemini", "endpointURL": "", "model": ""}
+        """
+        let decoded = try JSONDecoder().decode(AIParserSettings.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded.provider, .gemini)
+        XCTAssertEqual(decoded.endpointURL, defaultGeminiEndpointURL, "Empty endpoint should fall back to provider default")
+    }
+
+    func testAIParserSettingsInitDefault() {
+        let settings = AIParserSettings()
+        XCTAssertEqual(settings.provider, defaultAIProvider)
+        XCTAssertEqual(settings.endpointURL, defaultAIProvider.defaultEndpointURL)
+        XCTAssertEqual(settings.model, "")
+    }
+
+    // MARK: - AppSettings roundtrip completeness
+
+    func testRoundtripPreservesAllFields() throws {
+        let original = AppSettings(
+            sources: [SourceItem(name: "t", source: "/f.xlsx", bookingID: "B", calendar: "C")],
+            workdayHours: WorkdayHours(start: "08:00", end: "20:00"),
+            schedulingTimeZoneIdentifier: "Europe/London",
+            autoSyncEnabled: true,
+            autoSyncMinutes: 42,
+            upcomingOnly: false,
+            confirmBeforeSync: true,
+            confirmBeforeDeletion: false,
+            menuBarModeEnabled: true,
+            parserMode: .aiOnly,
+            aiParser: AIParserSettings(provider: .gemini, endpointURL: "https://custom.endpoint/v1", model: "custom-model"),
+            aiApprovals: [AIApprovalRecord(sourceKey: "sk", workbookFingerprint: "fp", approvedAtISO: "2025-01-01T00:00:00Z")],
+            lastDraft: DraftEditorState(selectedSourceID: nil, enabled: true, name: "d", source: "s", bookingID: "b", calendar: "c")
+        )
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
+
+        XCTAssertEqual(decoded.aiParser.provider, .gemini)
+        XCTAssertEqual(decoded.aiParser.endpointURL, "https://custom.endpoint/v1")
+        XCTAssertEqual(decoded.aiParser.model, "custom-model")
+        XCTAssertEqual(decoded.aiApprovals.count, 1)
+        XCTAssertEqual(decoded.aiApprovals.first?.sourceKey, "sk")
+        XCTAssertNotNil(decoded.lastDraft)
+        XCTAssertEqual(decoded.lastDraft?.name, "d")
+        XCTAssertEqual(decoded.autoSyncMinutes, 42)
+        XCTAssertEqual(decoded.menuBarModeEnabled, true)
+    }
+
+    // MARK: - Provider coverage completeness
+
+    func testAllProvidersHaveImageSupportDefined() {
+        for provider in AIProvider.allCases {
+            _ = provider.supportsImageParsing
+            _ = provider.requiresImageReviewByDefault
+        }
+    }
+
+    func testKimiImageModelSwitch() {
+        XCTAssertNotNil(AIProvider.kimi.defaultImageModel)
+        XCTAssertNotEqual(AIProvider.kimi.defaultImageModel, AIProvider.kimi.defaultModel)
+    }
+
+    func testInferAIProviderWithSpacesAndCase() {
+        XCTAssertEqual(inferAIProvider(fromEndpoint: "  HTTPS://API.ANTHROPIC.COM/v1/messages  "), .anthropic)
+        XCTAssertEqual(inferAIProvider(fromEndpoint: "  https://api.deepseek.com/chat/completions  "), .deepSeek)
+    }
 }
