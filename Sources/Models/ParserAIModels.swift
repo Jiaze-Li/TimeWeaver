@@ -235,11 +235,33 @@ enum AIRequestStyle {
     case geminiGenerateContent
 }
 
+struct AIFallbackServiceConfiguration {
+    var provider: AIProvider
+    var endpointURL: URL
+    var apiKey: String
+    var model: String
+
+    func resolvedModel(forImageParsing: Bool) -> String {
+        let normalizedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !normalizedModel.isEmpty {
+            return normalizedModel
+        }
+        return forImageParsing ? provider.automaticImageModel : provider.automaticSheetModel
+    }
+
+    func configurationForRequest(isImageParsing: Bool) -> AIFallbackServiceConfiguration {
+        var adjusted = self
+        adjusted.model = resolvedModel(forImageParsing: isImageParsing)
+        return adjusted
+    }
+}
+
 struct AIServiceConfiguration {
     var provider: AIProvider
     var endpointURL: URL
     var apiKey: String
     var model: String
+    var fallbackProvider: AIFallbackServiceConfiguration? = nil
 
     var requestStyle: AIRequestStyle {
         switch provider {

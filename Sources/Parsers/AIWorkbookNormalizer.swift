@@ -142,6 +142,21 @@ struct AIWorkbookNormalizer {
         case visibleFields
     }
 
+    private struct AIRequestPayloadResponse {
+        var payloadData: Data
+        var providerUsed: AIProvider
+        var usedFallback: Bool
+    }
+
+    private struct CachedAINormalizationResult {
+        var result: AINormalizationResult
+        var expiresAt: Date
+    }
+
+    private static let normalizationCacheTTL: TimeInterval = 30 * 60
+    private static var normalizationCache: [String: CachedAINormalizationResult] = [:]
+    private static let normalizationCacheLock = NSLock()
+
     static func normalizeImage(
         source: SourceItem,
         workdayHours: WorkdayHours,
@@ -163,6 +178,9 @@ struct AIWorkbookNormalizer {
             String(attachment.data.count)
         ].joined(separator: "|")
         let workbookFingerprint = digest(fingerprintInput + digest(attachment.data.base64EncodedString()))
+        if let cached = cachedNormalizationResult(for: workbookFingerprint) {
+            return addingNote("Using cached AI result.", to: cached)
+        }
         let ocrHints = localOCRHints(from: imageURL)
 
         let extractionStyle = imageExtractionStyle(for: configuration.provider)
@@ -184,7 +202,7 @@ struct AIWorkbookNormalizer {
 
         let schema = imageSchema(for: extractionStyle)
 
-        let payloadData = try await requestPayload(
+        let requestResponse = try await requestPayload(
             configuration: configuration,
             instructions: instructions,
             prompt: prompt,
@@ -192,14 +210,22 @@ struct AIWorkbookNormalizer {
             imageAttachment: attachment
         )
 
-        let initial = try buildNormalizationResult(
-            payloadData: payloadData,
+        let initialResult = try buildNormalizationResult(
+            payloadData: requestResponse.payloadData,
             workbookFingerprint: workbookFingerprint,
             workdayHours: workdayHours,
             timeZone: timeZone
         )
+        let initial = noteProviderUsage(
+            for: initialResult,
+            primaryProvider: configuration.provider,
+            providerUsed: requestResponse.providerUsed,
+            usedFallback: requestResponse.usedFallback
+        )
         guard configuration.provider != .gemini, configuration.provider != .kimi, configuration.provider != .anthropic, !initial.occurrences.isEmpty else {
-            return applyImageProviderPolicy(to: initial, provider: configuration.provider)
+            let finalized = applyImageProviderPolicy(to: initial, provider: configuration.provider)
+            cacheNormalizationResult(finalized, for: workbookFingerprint)
+            return finalized
         }
 
         let refined = try await refineImageNormalization(
@@ -214,7 +240,9 @@ struct AIWorkbookNormalizer {
             ocrHints: ocrHints
         )
         let preferred = preferredImageNormalization(initial: initial, refined: refined)
-        return applyImageProviderPolicy(to: preferred, provider: configuration.provider)
+        let finalized = applyImageProviderPolicy(to: preferred, provider: configuration.provider)
+        cacheNormalizationResult(finalized, for: workbookFingerprint)
+        return finalized
     }
 
     static func normalize(
@@ -244,6 +272,9 @@ struct AIWorkbookNormalizer {
             throw AppFailure.invalidAIResponse("Could not encode workbook snapshot.")
         }
         let workbookFingerprint = digest(snapshotText)
+        if let cached = cachedNormalizationResult(for: workbookFingerprint) {
+            return addingNote("Using cached AI result.", to: cached)
+        }
 
         let instructions = """
         You normalize reservation spreadsheets into atomic calendar occurrences.
@@ -300,19 +331,26 @@ struct AIWorkbookNormalizer {
             "required": ["parser_summary", "occurrences"]
         ]
 
-        let payloadData = try await requestPayload(
+        let requestResponse = try await requestPayload(
             configuration: configuration,
             instructions: instructions,
             prompt: prompt,
             schema: schema
         )
-
-        return try buildNormalizationResult(
-            payloadData: payloadData,
+        let result = try buildNormalizationResult(
+            payloadData: requestResponse.payloadData,
             workbookFingerprint: workbookFingerprint,
             workdayHours: workdayHours,
             timeZone: timeZone
         )
+        let noted = noteProviderUsage(
+            for: result,
+            primaryProvider: configuration.provider,
+            providerUsed: requestResponse.providerUsed,
+            usedFallback: requestResponse.usedFallback
+        )
+        cacheNormalizationResult(noted, for: workbookFingerprint)
+        return noted
     }
 
     private static func buildNormalizationResult(
@@ -780,19 +818,24 @@ struct AIWorkbookNormalizer {
         \(ocrHints.map { "\nLocal OCR hints (secondary check only; trust the image if OCR conflicts):\n\($0)" } ?? "")
         """
 
-        let payloadData = try await requestPayload(
+        let requestResponse = try await requestPayload(
             configuration: configuration,
             instructions: instructions,
             prompt: prompt,
             schema: schema,
             imageAttachment: attachment
         )
-
-        return try buildNormalizationResult(
-            payloadData: payloadData,
+        let result = try buildNormalizationResult(
+            payloadData: requestResponse.payloadData,
             workbookFingerprint: workbookFingerprint,
             workdayHours: workdayHours,
             timeZone: timeZone
+        )
+        return noteProviderUsage(
+            for: result,
+            primaryProvider: configuration.provider,
+            providerUsed: requestResponse.providerUsed,
+            usedFallback: requestResponse.usedFallback
         )
     }
 
@@ -1053,13 +1096,56 @@ struct AIWorkbookNormalizer {
         prompt: String,
         schema: [String: Any],
         imageAttachment: AIImageAttachment? = nil
-    ) async throws -> Data {
-        let requestConfiguration = configuration.configurationForRequest(isImageParsing: imageAttachment != nil)
+    ) async throws -> AIRequestPayloadResponse {
+        let isImageParsing = imageAttachment != nil
+        let requestConfiguration = configuration.configurationForRequest(isImageParsing: isImageParsing)
+        do {
+            let payloadText = try await requestPayloadText(
+                configuration: requestConfiguration,
+                instructions: instructions,
+                prompt: prompt,
+                schema: schema,
+                imageAttachment: imageAttachment
+            )
+            return AIRequestPayloadResponse(
+                payloadData: Data(payloadText.utf8),
+                providerUsed: requestConfiguration.provider,
+                usedFallback: false
+            )
+        } catch {
+            guard
+                shouldRetryWithFallback(for: error),
+                let fallback = fallbackRequestConfiguration(from: configuration, isImageParsing: isImageParsing)
+            else {
+                throw error
+            }
+            let payloadText = try await requestPayloadText(
+                configuration: fallback,
+                instructions: instructions,
+                prompt: prompt,
+                schema: schema,
+                imageAttachment: imageAttachment
+            )
+            return AIRequestPayloadResponse(
+                payloadData: Data(payloadText.utf8),
+                providerUsed: fallback.provider,
+                usedFallback: true
+            )
+        }
+    }
+
+    private static func requestPayloadText(
+        configuration: AIServiceConfiguration,
+        instructions: String,
+        prompt: String,
+        schema: [String: Any],
+        imageAttachment: AIImageAttachment?
+    ) async throws -> String {
         let payloadText: String
-        switch requestConfiguration.requestStyle {
+        switch configuration.requestStyle {
         case .responses:
             payloadText = try await requestResponsesPayloadText(
-                configuration: requestConfiguration,
+                configuration: configuration,
                 instructions: instructions,
                 prompt: prompt,
                 schema: schema,
@@ -1067,7 +1153,7 @@ struct AIWorkbookNormalizer {
             )
         case .chatCompletions:
             payloadText = try await requestChatCompletionsPayloadText(
-                configuration: requestConfiguration,
+                configuration: configuration,
                 instructions: instructions,
                 prompt: prompt,
                 schema: schema,
@@ -1075,7 +1161,7 @@ struct AIWorkbookNormalizer {
             )
         case .anthropicMessages:
             payloadText = try await requestAnthropicPayloadText(
-                configuration: requestConfiguration,
+                configuration: configuration,
                 instructions: instructions,
                 prompt: prompt,
                 schema: schema,
@@ -1083,7 +1169,7 @@ struct AIWorkbookNormalizer {
             )
         case .geminiGenerateContent:
             payloadText = try await requestGeminiPayloadText(
-                configuration: requestConfiguration,
+                configuration: configuration,
                 instructions: instructions,
                 prompt: prompt,
                 schema: schema,
@@ -1091,7 +1177,102 @@ struct AIWorkbookNormalizer {
             )
         }
 
-        return Data(payloadText.utf8)
+        return payloadText
+    }
+
+    private static func fallbackRequestConfiguration(
+        from configuration: AIServiceConfiguration,
+        isImageParsing: Bool
+    ) -> AIServiceConfiguration? {
+        guard let fallback = configuration.fallbackProvider?.configurationForRequest(isImageParsing: isImageParsing) else {
+            return nil
+        }
+
+        if fallback.provider == configuration.provider,
+           fallback.endpointURL == configuration.endpointURL,
+           fallback.apiKey == configuration.apiKey,
+           fallback.model == configuration.model {
+            return nil
+        }
+
+        return AIServiceConfiguration(
+            provider: fallback.provider,
+            endpointURL: fallback.endpointURL,
+            apiKey: fallback.apiKey,
+            model: fallback.model,
+            fallbackProvider: nil
+        )
+    }
+
+    private static func shouldRetryWithFallback(for error: Error) -> Bool {
+        guard let appFailure = error as? AppFailure, case .syncFailed(let message) = appFailure else {
+            return false
+        }
+
+        let normalized = message.lowercased()
+        if normalized.contains("invalid or lacks permission")
+            || normalized.contains("authentication is required")
+            || normalized.contains("policy/safety")
+            || normalized.contains("model name is invalid or unavailable") {
+            return false
+        }
+
+        if normalized.contains("network connection error")
+            || normalized.contains("timed out")
+            || normalized.contains("rate limited")
+            || normalized.contains("http 408")
+            || normalized.contains("http 5") {
+            return true
+        }
+        return false
+    }
+
+    private static func noteProviderUsage(
+        for result: AINormalizationResult,
+        primaryProvider: AIProvider,
+        providerUsed: AIProvider,
+        usedFallback: Bool
+    ) -> AINormalizationResult {
+        if usedFallback {
+            return addingNote(
+                "AI provider fallback used: \(primaryProvider.title) -> \(providerUsed.title).",
+                to: result
+            )
+        }
+        return addingNote("AI provider used: \(providerUsed.title).", to: result)
+    }
+
+    private static func addingNote(_ note: String, to result: AINormalizationResult) -> AINormalizationResult {
+        guard !result.notes.contains(note) else {
+            return result
+        }
+        var adjusted = result
+        adjusted.notes.append(note)
+        return adjusted
+    }
+
+    private static func cachedNormalizationResult(for workbookFingerprint: String) -> AINormalizationResult? {
+        normalizationCacheLock.lock()
+        defer { normalizationCacheLock.unlock() }
+
+        guard let entry = normalizationCache[workbookFingerprint] else {
+            return nil
+        }
+        if entry.expiresAt <= Date() {
+            normalizationCache.removeValue(forKey: workbookFingerprint)
+            return nil
+        }
+        return entry.result
+    }
+
+    private static func cacheNormalizationResult(_ result: AINormalizationResult, for workbookFingerprint: String) {
+        normalizationCacheLock.lock()
+        defer { normalizationCacheLock.unlock() }
+
+        normalizationCache[workbookFingerprint] = CachedAINormalizationResult(
+            result: result,
+            expiresAt: Date().addingTimeInterval(normalizationCacheTTL)
+        )
     }
 
     private static func requestResponsesPayloadText(
@@ -1756,4 +1937,3 @@ struct AIWorkbookNormalizer {
         return AIImageAttachment(data: data, mimeType: mimeType)
     }
 }
-
