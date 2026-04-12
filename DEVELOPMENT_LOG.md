@@ -1,9 +1,8 @@
 # TimeWeaver 开发日志 / 项目经理交接文档
 
-最后更新：2026-03-09  
-当前项目目录：[PPMSCalendarSync](/Users/jack/PPMSCalendarSync)  
-当前桌面成品：[TimeWeaver.app](/Users/jack/Desktop/TimeWeaver.app)  
-当前仓库默认构建产物：[TimeWeaver.app](/Users/jack/PPMSCalendarSync/build/TimeWeaver.app)
+最后更新：2026-04-12  
+当前项目目录：/Users/jack/Downloads/scripts/Codex TimeWeaver  
+当前仓库默认构建产物：/Users/jack/Downloads/scripts/Codex TimeWeaver/build/TimeWeaver.app
 
 ## 1. 先给下一个 PM 的一句话结论
 
@@ -612,3 +611,85 @@ UI 文案也同步从：
 - 日期头与 slot 行是否真的是同一周块
 
 这类 bug 的本质不是 AI，也不是 Calendar，而是**本地规则解析器的分块边界判断**。
+
+---
+
+## 14. v0.4.0 — 架构重构与 AI 优化（2026-04-12）
+
+### 14.1 Claude AI 优化
+
+- 默认模型升级：`claude-sonnet-4-20250514` → `claude-sonnet-4-6`
+- 添加 response prefill（`{"parser_summary":` 前缀强制 JSON 输出）
+- 添加 `anthropic-beta: prompt-caching-2024-07-31` 降低重复调用成本
+- 设置 `temperature: 0` 确保确定性输出
+- 跳过二次验证 pass（与 Gemini/Kimi 同级），延迟和费用减半
+- `max_tokens` 从 4096 提升到 8192
+- Anthropic 在 picker 中升级为 "(images, recommended)"
+
+### 14.2 AI 增强功能
+
+- **Provider 自动回退**：临时错误（网络/超时/限流/5xx）自动用 fallback provider 重试一次。Auth 错误和 safety block 不重试。
+- **结果缓存**：基于 `workbookFingerprint|provider|model` 的内存缓存，30 分钟 TTL。写入时自动清理过期条目。
+- fallback 配置通过 `AIServiceConfiguration.fallbackProvider` 注入
+
+### 14.3 架构重构
+
+**协议抽象（零协议 → 5 个协议）**：
+- `CalendarStoreProtocol`：抽象 EKEventStore（含 `makeEvent()` 工厂方法）
+- `SyncStateStoreProtocol`：抽象 SettingsStore.loadState/saveState
+- `AIWorkbookNormalizerProtocol`：抽象 AI 解析
+- `LocalImageParserProtocol`：抽象本地图片解析
+- 所有协议有默认实现，生产代码零改动即可使用
+
+**依赖注入**：
+- `CalendarSyncEngine` init 接受所有协议实例（默认值保持向后兼容）
+- `ReservationExtractor` 从全静态方法改为实例类型，持有注入的 parser 协议
+- `AppModel` 的 `CalendarSyncEngine` 可通过 init 注入
+
+**并发安全修复**：
+- `SettingsCoordinator` 添加 `@MainActor`，修复 `lastPersistedSettingsData` / `lastPersistedAIAPIKey` 的数据竞争
+- `SettingsStore.migrationChecked` 添加 `nonisolated(unsafe)` 标注
+
+**核心逻辑提取**：
+- `SlotRule` 结构体和 `inferredSlotRule`/`parseSlotRange`/`resolvedTimeCandidates` 移入 `TimeWeaverCore`
+- `Package.swift`：`TimeWeaverAppLogic` 添加对 `TimeWeaverCore` 的依赖
+
+### 14.4 UI 重构
+
+- `ContentView.swift` 从 1,147 行拆分到 126 行
+- 提取 11 个子组件到 `Sources/UI/Components/`：
+  HeaderPaneView, QuickActionsPaneView, SidebarPaneView, SourcesPaneView,
+  ActivityPaneView, EditorPaneView, SourceDetailsPaneView, AIParsingPaneView,
+  DefaultHoursPaneView, AutomationPaneView, ContentViewHelpers
+
+### 14.5 代码质量
+
+- 7 处 `try!` NSRegularExpression 改为文件级静态常量
+- 硬编码 `"Asia/Singapore"`, `"Experiment"`, `"LJZ"` 集中到 Defaults.swift（`defaultSchedulingTimeZoneIdentifier`, `defaultCalendarName`, `defaultBookingID`）
+- 5 处重复的 `calendarSyncEngine.sync(...)` 参数构建提取为 `performSync()` + `resolvedWorkdayHours`
+- `URLSessionConfiguration` 从 `ephemeral` 改为 `default`，修复 VPN/代理环境下的 TLS 错误
+
+### 14.6 测试
+
+测试数量：14 → 82（全部通过，经 Codex 审核）
+
+新增测试覆盖：
+- SlotRule 解析（各种时间格式、AM/PM、边界条件、label 保留）
+- Sync 决策逻辑（策略选择、增删改判断、boundary start==now、fractional ISO）
+- Settings 持久化（编解码 roundtrip、去重、API key 变更触发）
+- AI Provider 推断（endpoint 推断、大小写、空格容错）
+- AIServiceConfiguration（requestStyle、resolvedModel、manual override、custom 推断）
+- AIParserSettings decode（provider 推断、空 endpoint 回退）
+- AppSettings 完整 roundtrip（含 aiParser、aiApprovals、lastDraft）
+
+### 14.7 版本与发布
+
+- PR: [#4](https://github.com/Jiaze-Li/TimeWeaver/pull/4)
+- Release: [v0.4.0](https://github.com/Jiaze-Li/TimeWeaver/releases/tag/v0.4.0)
+- CI: GitHub Actions `macos-build` 通过
+
+### 14.8 已知限制与未来方向
+
+- CalendarSyncEngine 的 `syncSource` 仍然直接操作 EKEvent/EKCalendar 类型，SPM 测试中无法完全 mock。Codex 建议提取 `SyncPlanner` 纯逻辑层——当前复杂度不需要，sync 逻辑变复杂时再做。
+- AppModel 仍为"上帝对象"（6 文件 ~1,000 行），但扩展间高度耦合使拆分收益有限。已通过 `performSync()` 减少重复。
+- AI 回退目前只支持一次重试，不支持链式回退。
