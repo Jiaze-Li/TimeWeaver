@@ -181,7 +181,8 @@ struct AIWorkbookNormalizer {
             String(attachment.data.count)
         ].joined(separator: "|")
         let workbookFingerprint = digest(fingerprintInput + digest(attachment.data.base64EncodedString()))
-        if let cached = cachedNormalizationResult(for: workbookFingerprint) {
+        let cacheKey = workbookFingerprint + "|" + configuration.provider.rawValue + "|" + configuration.model
+        if let cached = cachedNormalizationResult(for: cacheKey) {
             return addingNote("Using cached AI result.", to: cached)
         }
         let ocrHints = localOCRHints(from: imageURL)
@@ -227,7 +228,7 @@ struct AIWorkbookNormalizer {
         )
         guard configuration.provider != .gemini, configuration.provider != .kimi, configuration.provider != .anthropic, !initial.occurrences.isEmpty else {
             let finalized = applyImageProviderPolicy(to: initial, provider: configuration.provider)
-            cacheNormalizationResult(finalized, for: workbookFingerprint)
+            cacheNormalizationResult(finalized, for: cacheKey)
             return finalized
         }
 
@@ -244,7 +245,7 @@ struct AIWorkbookNormalizer {
         )
         let preferred = preferredImageNormalization(initial: initial, refined: refined)
         let finalized = applyImageProviderPolicy(to: preferred, provider: configuration.provider)
-        cacheNormalizationResult(finalized, for: workbookFingerprint)
+        cacheNormalizationResult(finalized, for: cacheKey)
         return finalized
     }
 
@@ -275,7 +276,8 @@ struct AIWorkbookNormalizer {
             throw AppFailure.invalidAIResponse("Could not encode workbook snapshot.")
         }
         let workbookFingerprint = digest(snapshotText)
-        if let cached = cachedNormalizationResult(for: workbookFingerprint) {
+        let cacheKey = workbookFingerprint + "|" + configuration.provider.rawValue + "|" + configuration.model
+        if let cached = cachedNormalizationResult(for: cacheKey) {
             return addingNote("Using cached AI result.", to: cached)
         }
 
@@ -352,7 +354,7 @@ struct AIWorkbookNormalizer {
             providerUsed: requestResponse.providerUsed,
             usedFallback: requestResponse.usedFallback
         )
-        cacheNormalizationResult(noted, for: workbookFingerprint)
+        cacheNormalizationResult(noted, for: cacheKey)
         return noted
     }
 
