@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 
+@MainActor
 func deferredBinding<Value: Equatable>(model: AppModel, _ keyPath: WritableKeyPath<UIState, Value>) -> Binding<Value> {
     Binding(
         get: { model.ui[keyPath: keyPath] },
