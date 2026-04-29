@@ -29,6 +29,20 @@ let package = Package(
             name: "TimeWeaverAppLogic",
             dependencies: ["TimeWeaverCore"],
             path: "Sources",
+            exclude: [
+                "Parsers",
+                "Sync",
+                "TimeWeaverCore",
+                "UI/AppModel.swift",
+                "UI/AppModel+Automation.swift",
+                "UI/AppModel+ImageImport.swift",
+                "UI/AppModel+Persistence.swift",
+                "UI/AppModel+SourcesAndCalendars.swift",
+                "UI/AppModel+SyncFlow.swift",
+                "UI/Components",
+                "UI/ContentView.swift",
+                "UI/ImageImportReviewSheet.swift"
+            ],
             sources: [
                 "Models/AppIdentity.swift",
                 "Models/SourceItem.swift",

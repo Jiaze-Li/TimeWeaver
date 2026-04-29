@@ -295,14 +295,14 @@ Sync 前会弹确认，展示本次 `Add / Update / Remove` 数量。
 
 当前主要逻辑基本集中在：
 
-- [PPMSCalendarSync.swift](/Users/jack/PPMSCalendarSync/PPMSCalendarSync.swift)
+- [TimeWeaver.swift](/Users/jack/Downloads/scripts/Codex TimeWeaver/TimeWeaver.swift)
 
 辅助文件：
 
-- [Info.plist](/Users/jack/PPMSCalendarSync/Info.plist)
-- [build_native_app.sh](/Users/jack/PPMSCalendarSync/build_native_app.sh)
-- [README.md](/Users/jack/PPMSCalendarSync/README.md)
-- [DEVELOPMENT_LOG.md](/Users/jack/PPMSCalendarSync/DEVELOPMENT_LOG.md)
+- [Info.plist](/Users/jack/Downloads/scripts/Codex TimeWeaver/Info.plist)
+- [build_native_app.sh](/Users/jack/Downloads/scripts/Codex TimeWeaver/build_native_app.sh)
+- [README.md](/Users/jack/Downloads/scripts/Codex TimeWeaver/README.md)
+- [DEVELOPMENT_LOG.md](/Users/jack/Downloads/scripts/Codex TimeWeaver/DEVELOPMENT_LOG.md)
 
 ### 9.3 数据与迁移
 
@@ -371,10 +371,10 @@ Sync 前会弹确认，展示本次 `Add / Update / Remove` 数量。
 
 ## 14. 本次交接时的关键文件和产物
 
-- 源码：[PPMSCalendarSync.swift](/Users/jack/PPMSCalendarSync/PPMSCalendarSync.swift)
-- 本地构建脚本：[build_native_app.sh](/Users/jack/PPMSCalendarSync/build_native_app.sh)
+- 源码：[TimeWeaver.swift](/Users/jack/Downloads/scripts/Codex TimeWeaver/TimeWeaver.swift)
+- 本地构建脚本：[build_native_app.sh](/Users/jack/Downloads/scripts/Codex TimeWeaver/build_native_app.sh)
 - DMG 脚本：`create_dmg.sh`（若不存在，需补）
-- 当前 build app：[TimeWeaver.app](/Users/jack/PPMSCalendarSync/build/TimeWeaver.app)
+- 当前 build app：[TimeWeaver.app](/Users/jack/Downloads/scripts/Codex TimeWeaver/build/TimeWeaver.app)
 - 当前桌面 app：[TimeWeaver.app](/Users/jack/Desktop/TimeWeaver.app)
 
 ## 15. 最后一条提醒
@@ -517,7 +517,7 @@ e70af7c Improve responsive window layout
 用户指出：
 
 - `PLD` 没有同步 `2026-03-09`
-- `ppms` 和 `ppms-2` 却同步出了 `2026-03-10 08:30-13:00` 与 `2026-03-11 08:30-13:00`
+- 两个测试 source 却同步出了 `2026-03-10 08:30-13:00` 与 `2026-03-11 08:30-13:00`
 - 但用户确认原始 `ppms` sheet 里并没有这两天的 `LJZ`
 
 ### 13.2 实际排查结果
@@ -528,12 +528,12 @@ e70af7c Improve responsive window layout
 - `sync-state.json` 中确实记录了：
   - `ppms` 的 `2026-03-10 08:30-13:00`
   - `ppms` 的 `2026-03-11 08:30-13:00`
-  - `ppms-2` 同样两条
+  - 第二个测试 source 同样两条
 
 再直接下载两份工作簿导出：
 
 - `ppms`: `1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg`
-- `ppms-2`: `1iNjlrtNATd7cAi_6ZfSrsWWcTtSa7trjU8OaQCoJfPo`
+- 第二个测试 source: `1iNjlrtNATd7cAi_6ZfSrsWWcTtSa7trjU8OaQCoJfPo`
 
 查 `Mar 2026` 原表后，事实是：
 
@@ -584,7 +584,7 @@ UI 文案也同步从：
 
 ### 13.5 修复后验证
 
-用当前源码重新编译 `PPMS_TEST_RUNNER` 后，`ppms` 与 `ppms-2` 的 `2026-03` 匹配结果变成：
+用当前源码重新编译 `TIMEWEAVER_TEST_RUNNER` 后，两个测试 source 的 `2026-03` 匹配结果变成：
 
 - `2026-03-04 08:30 -> 2026-03-06 08:30`
 - `2026-03-17 08:30 -> 2026-03-19 08:30`

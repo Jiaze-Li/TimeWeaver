@@ -1,6 +1,19 @@
 import Foundation
 import EventKit
 
+private let primaryEventURLScheme = "timeweaver-sync"
+private let legacyEventURLScheme = "ppms-sync"
+
+private func primaryEventURL(for syncKey: String) -> URL? {
+    URL(string: "\(primaryEventURLScheme)://event/\(syncKey)")
+}
+
+private func eventURLs(for syncKey: String) -> [URL] {
+    [primaryEventURLScheme, legacyEventURLScheme].compactMap {
+        URL(string: "\($0)://event/\(syncKey)")
+    }
+}
+
 private struct ReservationExtractor {
     let aiNormalizer: AIWorkbookNormalizerProtocol
     let localImageParser: LocalImageParserProtocol
@@ -719,7 +732,7 @@ actor CalendarSyncEngine {
         let activeKeys = Set(events.map(\.syncKey))
 
         for event in events {
-            let customURL = URL(string: "ppms-sync://event/\(event.syncKey)")!
+            let customURL = primaryEventURL(for: event.syncKey)!
             let existingRecord = state.events[event.syncKey]
             let existingEvent = findExistingEvent(for: event, stateRecord: existingRecord, calendar: calendar, customURL: customURL)
             let target = existingEvent ?? store.makeEvent()
@@ -839,7 +852,10 @@ actor CalendarSyncEngine {
         let start = Calendar.current.date(byAdding: .day, value: -2, to: event.start) ?? event.start
         let end = Calendar.current.date(byAdding: .day, value: 2, to: event.end) ?? event.end
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: [calendar])
-        return store.events(matching: predicate).first(where: { $0.url == customURL })
+        let candidateURLs = Set(eventURLs(for: event.syncKey))
+        return store.events(matching: predicate).first(where: { event in
+            event.url == customURL || event.url.map { candidateURLs.contains($0) } == true
+        })
     }
 
     private func findStaleEvent(candidate: DeleteCandidate, calendar: EKCalendar) -> EKEvent? {
@@ -856,8 +872,10 @@ actor CalendarSyncEngine {
             end: Calendar.current.date(byAdding: .day, value: 2, to: end) ?? end,
             calendars: [calendar]
         )
-        let expectedURL = URL(string: "ppms-sync://event/\(candidate.syncKey)")
-        return store.events(matching: predicate).first(where: { $0.url == expectedURL })
+        let expectedURLs = Set(eventURLs(for: candidate.syncKey))
+        return store.events(matching: predicate).first(where: { event in
+            event.url.map { expectedURLs.contains($0) } == true
+        })
     }
 
     private func findEventForUndo(identifier: String, syncKey: String, start: Date, end: Date, calendar: EKCalendar) -> EKEvent? {
@@ -867,8 +885,10 @@ actor CalendarSyncEngine {
         let searchStart = Calendar.current.date(byAdding: .day, value: -2, to: start) ?? start
         let searchEnd = Calendar.current.date(byAdding: .day, value: 2, to: end) ?? end
         let predicate = store.predicateForEvents(withStart: searchStart, end: searchEnd, calendars: [calendar])
-        let expectedURL = URL(string: "ppms-sync://event/\(syncKey)")
-        return store.events(matching: predicate).first(where: { $0.url == expectedURL })
+        let expectedURLs = Set(eventURLs(for: syncKey))
+        return store.events(matching: predicate).first(where: { event in
+            event.url.map { expectedURLs.contains($0) } == true
+        })
     }
 
     func revertImageImport(
@@ -911,7 +931,7 @@ actor CalendarSyncEngine {
             guard let stored = record.beforeSnapshot[key],
                   let start = parseFlexibleISO8601(stored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(stored.endISO, timeZone: timeZone),
-                  let customURL = URL(string: "ppms-sync://event/\(key)") else { continue }
+                  let customURL = primaryEventURL(for: key) else { continue }
             let event = store.makeEvent()
             event.calendar = calendar
             event.title = stored.title
@@ -943,7 +963,7 @@ actor CalendarSyncEngine {
             }
             guard let start = parseFlexibleISO8601(oldStored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(oldStored.endISO, timeZone: timeZone),
-                  let customURL = URL(string: "ppms-sync://event/\(key)") else {
+                  let customURL = primaryEventURL(for: key) else {
                 state.events.removeValue(forKey: key)
                 removedCount += 1
                 continue

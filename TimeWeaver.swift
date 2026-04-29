@@ -2,15 +2,15 @@ import SwiftUI
 import AppKit
 import Foundation
 
-#if PPMS_TEST_RUNNER
+#if TIMEWEAVER_TEST_RUNNER
 import AppKit
 
 
 @MainActor
 private func writeSnapshot(to outputURL: URL, width: CGFloat, height: CGFloat) throws {
-    let detailsOnly = ProcessInfo.processInfo.environment["PPMS_SNAPSHOT_DETAILS_ONLY"] == "1"
-    let sourceDetailsOnly = ProcessInfo.processInfo.environment["PPMS_SNAPSHOT_SOURCE_DETAILS_ONLY"] == "1"
-    let sidebarOnly = ProcessInfo.processInfo.environment["PPMS_SNAPSHOT_SIDEBAR_ONLY"] == "1"
+    let detailsOnly = ProcessInfo.processInfo.environment["TIMEWEAVER_SNAPSHOT_DETAILS_ONLY"] == "1"
+    let sourceDetailsOnly = ProcessInfo.processInfo.environment["TIMEWEAVER_SNAPSHOT_SOURCE_DETAILS_ONLY"] == "1"
+    let sidebarOnly = ProcessInfo.processInfo.environment["TIMEWEAVER_SNAPSHOT_SIDEBAR_ONLY"] == "1"
     let model = AppModel()
     let base = ContentView()
     let content = Group {
@@ -52,9 +52,9 @@ private func writeSnapshot(to outputURL: URL, width: CGFloat, height: CGFloat) t
 struct TimeWeaverTestRunner {
     static func main() async {
         let environment = ProcessInfo.processInfo.environment
-        if let outputPath = environment["PPMS_SNAPSHOT_OUTPUT"] {
-            let width = Double(environment["PPMS_SNAPSHOT_WIDTH"] ?? "") ?? 980
-            let height = Double(environment["PPMS_SNAPSHOT_HEIGHT"] ?? "") ?? 900
+        if let outputPath = environment["TIMEWEAVER_SNAPSHOT_OUTPUT"] {
+            let width = Double(environment["TIMEWEAVER_SNAPSHOT_WIDTH"] ?? "") ?? 980
+            let height = Double(environment["TIMEWEAVER_SNAPSHOT_HEIGHT"] ?? "") ?? 900
 
             do {
                 try await MainActor.run {
@@ -73,23 +73,23 @@ struct TimeWeaverTestRunner {
         }
 
         let source = SourceItem(
-            name: environment["PPMS_TEST_SOURCE_NAME"] ?? "ppms",
-            source: environment["PPMS_TEST_SOURCE_URL"] ?? "https://docs.google.com/spreadsheets/d/1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg/edit?usp=sharing",
-            bookingID: environment["PPMS_TEST_BOOKING_ID"] ?? defaultBookingID,
-            calendar: environment["PPMS_TEST_CALENDAR"] ?? defaultCalendarName
+            name: environment["TIMEWEAVER_TEST_SOURCE_NAME"] ?? "timeweaver",
+            source: environment["TIMEWEAVER_TEST_SOURCE_URL"] ?? "https://docs.google.com/spreadsheets/d/1J7XCLh20n1qBkhBNyfF0XwnM2vItuOlGl6j5iQR1aVg/edit?usp=sharing",
+            bookingID: environment["TIMEWEAVER_TEST_BOOKING_ID"] ?? defaultBookingID,
+            calendar: environment["TIMEWEAVER_TEST_CALENDAR"] ?? defaultCalendarName
         )
-        let parserMode = ParserMode(rawValue: environment["PPMS_TEST_PARSER_MODE"] ?? "") ?? .rulesOnly
-        let aiProvider = AIProvider(rawValue: environment["PPMS_TEST_AI_PROVIDER"] ?? "")
-            ?? inferAIProvider(fromEndpoint: environment["PPMS_TEST_AI_ENDPOINT"] ?? "")
+        let parserMode = ParserMode(rawValue: environment["TIMEWEAVER_TEST_PARSER_MODE"] ?? "") ?? .rulesOnly
+        let aiProvider = AIProvider(rawValue: environment["TIMEWEAVER_TEST_AI_PROVIDER"] ?? "")
+            ?? inferAIProvider(fromEndpoint: environment["TIMEWEAVER_TEST_AI_ENDPOINT"] ?? "")
         let aiConfiguration: AIServiceConfiguration? = {
             guard
-                let endpoint = environment["PPMS_TEST_AI_ENDPOINT"],
-                let apiKey = environment["PPMS_TEST_AI_KEY"],
+                let endpoint = environment["TIMEWEAVER_TEST_AI_ENDPOINT"],
+                let apiKey = environment["TIMEWEAVER_TEST_AI_KEY"],
                 let url = URL(string: endpoint)
             else {
                 return nil
             }
-            let model = environment["PPMS_TEST_AI_MODEL"] ?? ""
+            let model = environment["TIMEWEAVER_TEST_AI_MODEL"] ?? ""
             if aiProvider == .custom && model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 return nil
             }
@@ -102,7 +102,7 @@ struct TimeWeaverTestRunner {
                 upcomingOnly: false,
                 parserMode: parserMode,
                 aiConfiguration: aiConfiguration,
-                timeZone: TimeZone(identifier: environment["PPMS_TEST_SCHEDULING_TZ"] ?? defaultSchedulingTimeZoneIdentifier) ?? .current
+                timeZone: TimeZone(identifier: environment["TIMEWEAVER_TEST_SCHEDULING_TZ"] ?? defaultSchedulingTimeZoneIdentifier) ?? .current
             )
             print("All matched reservations: \(result.allEvents.count)")
             print("Parser: \(result.parserLabel)")
@@ -119,7 +119,7 @@ struct TimeWeaverTestRunner {
                 parserMode: parserMode,
                 aiConfiguration: aiConfiguration,
                 aiApprovals: [],
-                schedulingTimeZoneIdentifier: environment["PPMS_TEST_SCHEDULING_TZ"] ?? defaultSchedulingTimeZoneIdentifier
+                schedulingTimeZoneIdentifier: environment["TIMEWEAVER_TEST_SCHEDULING_TZ"] ?? defaultSchedulingTimeZoneIdentifier
             )
             print("")
             print("Preview output:")

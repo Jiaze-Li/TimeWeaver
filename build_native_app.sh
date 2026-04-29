@@ -9,7 +9,7 @@ RES_DIR="$APP/Contents/Resources"
 rm -rf "$APP"
 mkdir -p "$BIN_DIR" "$RES_DIR"
 
-SOURCE_FILES=("$ROOT/PPMSCalendarSync.swift")
+SOURCE_FILES=("$ROOT/TimeWeaver.swift")
 if [[ -d "$ROOT/Sources" ]]; then
   while IFS= read -r file; do
     SOURCE_FILES+=("$file")

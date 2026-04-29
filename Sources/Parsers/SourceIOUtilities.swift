@@ -71,7 +71,7 @@ func downloadWorkbook(from source: String) async throws -> URL {
     configuration.timeoutIntervalForResource = 60
     configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
     configuration.httpAdditionalHeaders = [
-        "User-Agent": "PPMSCalendarSync/1.0"
+        "User-Agent": "TimeWeaver/1.2.0"
     ]
     let session = URLSession(configuration: configuration)
     let request = URLRequest(url: downloadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
@@ -79,7 +79,7 @@ func downloadWorkbook(from source: String) async throws -> URL {
     if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
         throw AppFailure.syncFailed("Workbook download failed with HTTP \(httpResponse.statusCode).")
     }
-    let finalURL = FileManager.default.temporaryDirectory.appendingPathComponent("ppms-\(UUID().uuidString).xlsx")
+    let finalURL = FileManager.default.temporaryDirectory.appendingPathComponent("timeweaver-\(UUID().uuidString).xlsx")
     try? FileManager.default.removeItem(at: finalURL)
     try FileManager.default.moveItem(at: tempURL, to: finalURL)
     return finalURL

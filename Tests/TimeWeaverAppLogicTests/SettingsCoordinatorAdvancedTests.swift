@@ -26,13 +26,13 @@ final class SettingsCoordinatorAdvancedTests: XCTestCase {
     }
 
     func testPersistCalledOnSettingsChange() {
-        var persistCount = 0
+        let recorder = PersistRecorder()
 
         let coordinator = SettingsCoordinator(
             loadSettings: { Self.makeSettings() },
             loadAIAPIKey: { "" },
             saveAIAPIKey: { _ in },
-            saveSettings: { _ in persistCount += 1 },
+            saveSettings: { @Sendable settings in recorder.saveSettings(settings) },
             persistExecutor: { work in work() }
         )
 
@@ -45,17 +45,17 @@ final class SettingsCoordinatorAdvancedTests: XCTestCase {
         coordinator.persistIfNeeded(settings: s1, encodedData: d1, aiAPIKey: "k")
         coordinator.persistIfNeeded(settings: s2, encodedData: d2, aiAPIKey: "k")
 
-        XCTAssertEqual(persistCount, 2, "Two different settings payloads should persist twice")
+        XCTAssertEqual(recorder.settingsCount, 2, "Two different settings payloads should persist twice")
     }
 
     func testPersistSkippedWhenIdentical() {
-        var persistCount = 0
+        let recorder = PersistRecorder()
 
         let coordinator = SettingsCoordinator(
             loadSettings: { Self.makeSettings() },
             loadAIAPIKey: { "" },
             saveAIAPIKey: { _ in },
-            saveSettings: { _ in persistCount += 1 },
+            saveSettings: { @Sendable settings in recorder.saveSettings(settings) },
             persistExecutor: { work in work() }
         )
 
@@ -66,16 +66,16 @@ final class SettingsCoordinatorAdvancedTests: XCTestCase {
         coordinator.persistIfNeeded(settings: s, encodedData: d, aiAPIKey: "k")
         coordinator.persistIfNeeded(settings: s, encodedData: d, aiAPIKey: "k")
 
-        XCTAssertEqual(persistCount, 1, "Identical payloads should persist only once")
+        XCTAssertEqual(recorder.settingsCount, 1, "Identical payloads should persist only once")
     }
 
     func testPersistTriggeredByAPIKeyChangeOnly() {
-        var savedKeys: [String] = []
+        let recorder = PersistRecorder()
 
         let coordinator = SettingsCoordinator(
             loadSettings: { Self.makeSettings() },
             loadAIAPIKey: { "" },
-            saveAIAPIKey: { savedKeys.append($0) },
+            saveAIAPIKey: { @Sendable key in recorder.saveAIAPIKey(key) },
             saveSettings: { _ in },
             persistExecutor: { work in work() }
         )
@@ -87,7 +87,7 @@ final class SettingsCoordinatorAdvancedTests: XCTestCase {
         coordinator.persistIfNeeded(settings: s, encodedData: d, aiAPIKey: "key2")
         coordinator.persistIfNeeded(settings: s, encodedData: d, aiAPIKey: "key3")
 
-        XCTAssertEqual(savedKeys, ["key1", "key2", "key3"])
+        XCTAssertEqual(recorder.aiKeys, ["key1", "key2", "key3"])
     }
 
     func testLoadSettingsReturnsInjectedValue() {

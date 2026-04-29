@@ -1,7 +1,7 @@
 import Foundation
 
 struct LaunchAutomation: Codable {
-    private static let controlFileURL = URL(fileURLWithPath: "/tmp/ppms_launch_automation.json")
+    private static let controlFileURL = URL(fileURLWithPath: "/tmp/timeweaver_launch_automation.json")
 
     enum Action: String, Codable {
         case preview
@@ -22,13 +22,13 @@ struct LaunchAutomation: Codable {
 
     static func fromEnvironment() -> LaunchAutomation? {
         let environment = ProcessInfo.processInfo.environment
-        guard let actionRaw = environment["PPMS_AUTOTEST_ACTION"],
+        guard let actionRaw = environment["TIMEWEAVER_AUTOTEST_ACTION"],
               let action = Action(rawValue: actionRaw),
-              let outputPath = environment["PPMS_AUTOTEST_OUTPUT"],
+              let outputPath = environment["TIMEWEAVER_AUTOTEST_OUTPUT"],
               !outputPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil
         }
-        let terminateAfterCompletion = environment["PPMS_AUTOTEST_EXIT"] == "1"
+        let terminateAfterCompletion = environment["TIMEWEAVER_AUTOTEST_EXIT"] == "1"
         return LaunchAutomation(
             action: action,
             outputPath: outputPath,

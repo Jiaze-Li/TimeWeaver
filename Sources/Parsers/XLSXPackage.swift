@@ -5,7 +5,7 @@ struct XLSXPackage {
 
     init(xlsxURL: URL) throws {
         let tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ppms-xlsx-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("timeweaver-xlsx-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
