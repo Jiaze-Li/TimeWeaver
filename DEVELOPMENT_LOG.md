@@ -1,6 +1,6 @@
 # TimeWeaver 开发日志 / 项目经理交接文档
 
-最后更新：2026-04-12  
+最后更新：2026-06-07  
 当前项目目录：/Users/jack/Downloads/scripts/Codex TimeWeaver  
 当前仓库默认构建产物：/Users/jack/Downloads/scripts/Codex TimeWeaver/build/TimeWeaver.app
 
@@ -125,7 +125,7 @@
 - 支持多个 saved source
 - 每个 source 可包含：
   - source 链接或本地路径
-  - booking ID
+  - booking ID（可用逗号填写多个，如 `abc, def`，命中任意一个都算时间）
   - event title
   - calendar
   - enabled / use in sync

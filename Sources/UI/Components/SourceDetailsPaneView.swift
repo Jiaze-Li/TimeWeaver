@@ -125,9 +125,13 @@ struct SourceDetailsPaneView: View {
             TextField(defaultBookingID, text: deferredBinding(model: model, \.draftBookingID))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
+                .help("Separate multiple IDs with commas (e.g. abc, def) to match any of them in this source.")
                 .onChange(of: model.ui.draftBookingID) { _ in
                     model.draftFieldsChanged()
                 }
+            Text("Separate multiple IDs with commas to match any of them.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -404,7 +404,7 @@ private struct ReservationExtractor {
 
             for (rule, slotRow) in slotRows {
                 guard let value = worksheet.cellsByRow[slotRow]?[column],
-                      value.caseInsensitiveCompare(source.bookingID) == .orderedSame else { continue }
+                      source.matchesBookingID(value) else { continue }
                 let start = try buildDate(from: baseDate, timeString: rule.start, in: timeZone)
                 var end = try buildDate(from: baseDate, timeString: rule.end, in: timeZone)
                 if rule.endsNextDay {
@@ -456,7 +456,7 @@ private struct ReservationExtractor {
         var occurrences: [SlotOccurrence] = []
         for (column, day) in dayColumns {
             guard let value = worksheet.cellsByRow[occupancyRow]?[column],
-                  value.caseInsensitiveCompare(source.bookingID) == .orderedSame else { continue }
+                  source.matchesBookingID(value) else { continue }
 
             var components = DateComponents()
             components.year = year
