@@ -122,16 +122,13 @@ struct SourceDetailsPaneView: View {
     private var bookingIDField: some View {
         VStack(alignment: .leading, spacing: 4) {
             FieldLabel(title: "Booking ID")
-            TextField(defaultBookingID, text: deferredBinding(model: model, \.draftBookingID))
+            TextField("e.g. abc, def — match any", text: deferredBinding(model: model, \.draftBookingID))
                 .textFieldStyle(.roundedBorder)
                 .controlSize(.small)
-                .help("Separate multiple IDs with commas (e.g. abc, def) to match any of them in this source.")
+                .help("Separate multiple IDs with commas (e.g. abc, def) to match any of them. Applies to spreadsheet sources; image sources still match a single ID.")
                 .onChange(of: model.ui.draftBookingID) { _ in
                     model.draftFieldsChanged()
                 }
-            Text("Separate multiple IDs with commas to match any of them.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

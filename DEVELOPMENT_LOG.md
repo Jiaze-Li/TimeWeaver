@@ -125,7 +125,7 @@
 - 支持多个 saved source
 - 每个 source 可包含：
   - source 链接或本地路径
-  - booking ID（可用逗号填写多个，如 `abc, def`，命中任意一个都算时间）
+  - booking ID（表格类 source 可用逗号填写多个，如 `abc, def`，命中任意一个都算时间；图片类 source 暂仍只匹配单个 ID）
   - event title
   - calendar
   - enabled / use in sync
