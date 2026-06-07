@@ -125,7 +125,7 @@ This is intentional so existing users do not lose settings during the rename to 
 
 ## Project Files
 
-- `PPMSCalendarSync.swift` — app shell and UI (still being split)
+- `TimeWeaver.swift` — app shell and UI entry point
 - `Sources/Models/SourceItem.swift` — source model and workday/slot baseline structs
 - `Sources/Models/AppSettings.swift` — persisted settings and AI approval model
 - `Sources/Models/SyncState.swift` — sync-state storage model

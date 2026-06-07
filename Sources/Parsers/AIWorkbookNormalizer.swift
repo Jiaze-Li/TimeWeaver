@@ -284,6 +284,7 @@ struct AIWorkbookNormalizer {
         let instructions = """
         You normalize reservation spreadsheets into atomic calendar occurrences.
         Match only reservations that belong to the provided booking ID.
+        The booking ID field may list several IDs separated by commas. Treat them as alternatives: include any cell that matches ANY one of the listed IDs.
         Return one occurrence per directly observed occupied slot or day. Do not pre-merge adjacent matches.
         Use the supplied timezone for all timestamps.
         If the workbook only gives a date without explicit times, use the provided default workday start and end for that day and set all_day to false.

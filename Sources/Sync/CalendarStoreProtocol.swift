@@ -11,7 +11,7 @@ protocol CalendarStoreProtocol {
     func makeEvent() -> EKEvent
     @available(macOS 14.0, *)
     func requestFullAccessToEvents() async throws -> Bool
-    func requestAccess(to entityType: EKEntityType, completion: @escaping (Bool, (any Error)?) -> Void)
+    func requestAccess(to entityType: EKEntityType, completion: @escaping @Sendable (Bool, (any Error)?) -> Void)
 }
 
 extension EKEventStore: CalendarStoreProtocol {

@@ -43,14 +43,13 @@ final class UIStateAndSettingsCoordinatorTests: XCTestCase {
     }
 
     func testSettingsCoordinatorSkipsDuplicatePersistPayload() {
-        var savedSettings = 0
-        var savedKeys: [String] = []
+        let recorder = PersistRecorder()
 
         let coordinator = SettingsCoordinator(
             loadSettings: { Self.makeSettings() },
             loadAIAPIKey: { "" },
-            saveAIAPIKey: { savedKeys.append($0) },
-            saveSettings: { _ in savedSettings += 1 },
+            saveAIAPIKey: { @Sendable key in recorder.saveAIAPIKey(key) },
+            saveSettings: { @Sendable settings in recorder.saveSettings(settings) },
             persistExecutor: { work in work() }
         )
 
@@ -60,19 +59,18 @@ final class UIStateAndSettingsCoordinatorTests: XCTestCase {
         coordinator.persistIfNeeded(settings: settings, encodedData: encoded, aiAPIKey: "k1")
         coordinator.persistIfNeeded(settings: settings, encodedData: encoded, aiAPIKey: "k1")
 
-        XCTAssertEqual(savedSettings, 1)
-        XCTAssertEqual(savedKeys, ["k1"])
+        XCTAssertEqual(recorder.settingsCount, 1)
+        XCTAssertEqual(recorder.aiKeys, ["k1"])
     }
 
     func testSettingsCoordinatorPersistsWhenKeyChanges() {
-        var savedSettings = 0
-        var savedKeys: [String] = []
+        let recorder = PersistRecorder()
 
         let coordinator = SettingsCoordinator(
             loadSettings: { Self.makeSettings() },
             loadAIAPIKey: { "" },
-            saveAIAPIKey: { savedKeys.append($0) },
-            saveSettings: { _ in savedSettings += 1 },
+            saveAIAPIKey: { @Sendable key in recorder.saveAIAPIKey(key) },
+            saveSettings: { @Sendable settings in recorder.saveSettings(settings) },
             persistExecutor: { work in work() }
         )
 
@@ -82,8 +80,8 @@ final class UIStateAndSettingsCoordinatorTests: XCTestCase {
         coordinator.persistIfNeeded(settings: settings, encodedData: encoded, aiAPIKey: "k1")
         coordinator.persistIfNeeded(settings: settings, encodedData: encoded, aiAPIKey: "k2")
 
-        XCTAssertEqual(savedSettings, 2)
-        XCTAssertEqual(savedKeys, ["k1", "k2"])
+        XCTAssertEqual(recorder.settingsCount, 2)
+        XCTAssertEqual(recorder.aiKeys, ["k1", "k2"])
     }
 
     private static func makeSettings() -> AppSettings {

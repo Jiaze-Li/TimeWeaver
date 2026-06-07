@@ -133,7 +133,7 @@ struct LocalTimetableImageParser {
     private static let compactClockRegex = try! NSRegularExpression(pattern: #"(?<!\d)(\d{2})(\d{2})(?!\d)"#)
 
     private static var debugLoggingEnabled: Bool {
-        ProcessInfo.processInfo.environment["PPMS_DEBUG_LOCAL_IMAGE"] == "1"
+        ProcessInfo.processInfo.environment["TIMEWEAVER_DEBUG_LOCAL_IMAGE"] == "1"
     }
 
     private static func debugLog(_ message: String) {
