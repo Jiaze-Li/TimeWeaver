@@ -95,4 +95,12 @@ final class AppModel: ObservableObject {
         timer?.invalidate()
         persistTask?.cancel()
     }
+
+    /// Shared entry point for the "start a busy async task" triplet (isBusy/output/status),
+    /// so every long-running action begins from the same, single guarded state transition.
+    func beginBusyTask(status: String) {
+        ui.isBusy = true
+        ui.output = ""
+        ui.status = status
+    }
 }

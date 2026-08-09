@@ -11,6 +11,7 @@ private let legacyAppSupportDirectory = appSupportBaseDirectory()
     .appendingPathComponent(legacyAppSupportDirectoryName, isDirectory: true)
 private let settingsURL = appSupportDirectory.appendingPathComponent("settings.json")
 private let stateURL = appSupportDirectory.appendingPathComponent("sync-state.json")
+private let legacyMigrationMarkerURL = appSupportDirectory.appendingPathComponent(".legacy-migration-complete")
 
 private let aiKeychainService = "TimeWeaver"
 private let aiKeychainServiceLegacy = "PPMSCalendarSync"
@@ -108,10 +109,15 @@ final class SettingsStore {
 
     private static func migrateLegacyStorageIfNeeded() throws {
         guard legacyAppSupportDirectory != appSupportDirectory else { return }
+        // Once migration has run (or was found unnecessary), skip re-scanning the legacy
+        // directory on every launch. The legacy read paths above (keychain, this scan)
+        // stay in place indefinitely — only the redundant per-launch directory scan is skipped.
+        guard !FileManager.default.fileExists(atPath: legacyMigrationMarkerURL.path) else { return }
 
         var isLegacyDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: legacyAppSupportDirectory.path, isDirectory: &isLegacyDirectory),
               isLegacyDirectory.boolValue else {
+            markLegacyMigrationComplete()
             return
         }
 
@@ -128,6 +134,12 @@ final class SettingsStore {
             }
             try? FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         }
+        markLegacyMigrationComplete()
+    }
+
+    private static func markLegacyMigrationComplete() {
+        try? FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: legacyMigrationMarkerURL.path, contents: Data())
     }
 
     static func loadSettings() -> AppSettings {

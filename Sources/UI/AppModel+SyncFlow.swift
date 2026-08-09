@@ -13,9 +13,7 @@ extension AppModel {
         alert.addButton(withTitle: "Cancel")
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
-        ui.isBusy = true
-        ui.output = ""
-        ui.status = "Undoing last image import..."
+        beginBusyTask(status: "Undoing last image import...")
         ui.lastImageImportUndo = nil
         Task {
             do {
@@ -52,9 +50,7 @@ extension AppModel {
         }
 
         if !previewOnly { ui.lastImageImportUndo = nil }
-        ui.isBusy = true
-        ui.output = ""
-        ui.status = previewOnly ? "Previewing..." : "Syncing..."
+        beginBusyTask(status: previewOnly ? "Previewing..." : "Syncing...")
         setLoadingStatuses(for: enabledSources)
         let syncStartedAt = Date()
 

@@ -45,9 +45,7 @@ extension AppModel {
             return
         }
 
-        ui.isBusy = true
-        ui.output = ""
-        ui.status = "Reading \(source.bookingID) schedule from image..."
+        beginBusyTask(status: "Reading \(source.bookingID) schedule from image...")
 
         Task {
             do {

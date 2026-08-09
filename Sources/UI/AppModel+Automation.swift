@@ -36,9 +36,7 @@ extension AppModel {
             return
         }
 
-        ui.isBusy = true
-        ui.output = ""
-        ui.status = "Checking sync changes..."
+        beginBusyTask(status: "Checking sync changes...")
         setLoadingStatuses(for: enabledSources)
         let syncStartedAt = Date()
 
@@ -127,6 +125,7 @@ extension AppModel {
     }
 
     private func previewForAutomatedDeletionSafety() {
+        if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
             ui.status = "Enable at least one source first"

@@ -693,3 +693,33 @@ UI 文案也同步从：
 - CalendarSyncEngine 的 `syncSource` 仍然直接操作 EKEvent/EKCalendar 类型，SPM 测试中无法完全 mock。Codex 建议提取 `SyncPlanner` 纯逻辑层——当前复杂度不需要，sync 逻辑变复杂时再做。
 - AppModel 仍为"上帝对象"（6 文件 ~1,000 行），但扩展间高度耦合使拆分收益有限。已通过 `performSync()` 减少重复。
 - AI 回退目前只支持一次重试，不支持链式回退。
+
+## 15. 技术债清理 — 大文件拆分与状态管理加固（2026-08-09）
+
+### 15.1 背景
+
+架构评估发现两个单文件仍然偏大（`AIWorkbookNormalizer.swift` 1945 行、`CalendarSyncEngine.swift` 1020 行），且 AppModel 相关代码里有多处重复的"进入/退出忙碌状态"三行组合（`ui.isBusy`/`ui.output`/`ui.status`）。Codex 先跑了一轮只读侦察（scout round）产出四块技术债的切分方案，确认历史存储标识迁移层应长期保留、不建议退役。
+
+### 15.2 文件拆分（Claude 编写 brief，Codex 实现，纯粹搬家不改行为）
+
+- `AIWorkbookNormalizer.swift`：1945 行 → 主文件 225 行 + `+Snapshot.swift`（52行）/ `+Resolution.swift`（461行）/ `+ImageFlow.swift`（409行）/ `+Transport.swift`（807行）
+- `CalendarSyncEngine.swift`：1020 行 → 主文件 45 行 + `ReservationExtractor.swift`（541行）/ `+Orchestration.swift`（125行）/ `+EventLookup.swift`（52行）/ `+Mutation.swift`（270行）
+
+**踩坑记录**：`AIWorkbookNormalizer+Resolution.swift` 拆分后出现两处 Swift `private` 可见性编译错误（`AINormalizationPayload`/`parseNormalizationPayload`/`resolveOccurrenceRange` 被误改为 internal，但引用的 `AINormalizedOccurrence` 仍是 file-private）。**根因是验收环节的盲区**：`Package.swift` 里 `TimeWeaverAppLogic` target 显式排除了 `Sources/Parsers`、`Sources/Sync` 和大部分 `UI/AppModel*`（见 target 注释"UI-only files excluded so this target stays testable without a display"），所以 `swift build`/`swift test` 通过完全不能证明这两个目录能编译。Codex 派发 brief 里写的"运行 swift build/test 验证"因此是一次无效验证。用 `build_native_app.sh`（swiftc 直接编译全部 Sources）重新走了一遍才抓到问题，已修复并重新验证 native app 编译 + 冷启动。**以后凡是改动 `Sources/Parsers`、`Sources/Sync`、`Sources/UI` 里被排除的文件，验收必须用 `build_native_app.sh`，不能只信 `swift build`/`swift test`。**
+
+### 15.3 AppModel 状态管理
+
+复核后发现风险比最初预期小：几乎所有异步入口已经用 `ui.isBusy` 做了防重入检查，不是完全无保护的共享状态。因此没有做 scout 建议的"拆成独立状态结构体"大改造（评估后判断收益不足以覆盖对 UI 视图层的改动面），改为最小化处理：
+- 补上 `AppModel+Automation.swift` 里 `previewForAutomatedDeletionSafety()` 缺失的 `if ui.isBusy { return }` 入口守卫（潜在重入缺口）
+- 新增 `beginBusyTask(status:)` 共享方法，替换 4 处完全一致的"isBusy=true; output=""; status=X"三行组合
+- 未触碰的"结束忙碌状态"写法（每处夹杂不同业务逻辑）保持原样，未来如需要再单独评估
+
+### 15.4 历史存储标识
+
+`Stores.swift` 的 legacy 迁移机制（旧目录名/旧 keychain service 名）确认**不退役，长期保留**。新增 `.legacy-migration-complete` 标记文件，迁移完成后跳过后续启动的目录扫描，不改变任何读路径。
+
+### 15.5 验证
+
+- `swift test`：86/86 通过
+- `build_native_app.sh`：全量 swiftc 编译通过（发现并修复了 15.2 的可见性问题）
+- 冷启动 smoke test：构建产物启动无崩溃，正常退出
