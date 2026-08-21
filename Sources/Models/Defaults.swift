@@ -8,7 +8,7 @@ func builtinSlotRules() -> [SlotRule] {
     [
         SlotRule(sheetLabel: "8:30-1pm", start: "08:30", end: "13:00", endsNextDay: false),
         SlotRule(sheetLabel: "1pm-6pm", start: "13:00", end: "18:00", endsNextDay: false),
-        SlotRule(sheetLabel: "overnight", start: "18:00", end: "08:30", endsNextDay: true),
+        SlotRule(sheetLabel: "overnight", start: "18:00", end: "00:00", endsNextDay: true),
     ]
 }
 
