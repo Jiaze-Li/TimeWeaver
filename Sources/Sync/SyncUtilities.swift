@@ -81,3 +81,46 @@ func customerFacingInterval(start: Date, end: Date) -> String {
     }
     return "\(dateTimeFormatter.string(from: start)) -> \(dateTimeFormatter.string(from: end))"
 }
+
+func buildAutoReviewItems(from reports: [SourceSyncReport], existingState: SyncState) -> [AutoReviewChangeItem] {
+    var items: [AutoReviewChangeItem] = []
+
+    let tz = TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current
+    for report in reports {
+        for action in report.actions {
+            guard ["would create", "would update", "would delete"].contains(action.status) else {
+                continue
+            }
+
+            var oldStart: Date? = nil
+            var oldEnd: Date? = nil
+            if let stored = existingState.events[action.syncKey] {
+                oldStart = parseFlexibleISO8601(stored.startISO, timeZone: tz)
+                oldEnd = parseFlexibleISO8601(stored.endISO, timeZone: tz)
+            }
+
+            var newStart: Date? = nil
+            var newEnd: Date? = nil
+            if action.status != "would delete" {
+                newStart = action.start
+                newEnd = action.end
+            }
+
+            items.append(
+                AutoReviewChangeItem(
+                    sourceName: report.sourceName,
+                    calendarName: report.calendarName,
+                    status: action.status,
+                    title: action.title,
+                    oldStart: oldStart,
+                    oldEnd: oldEnd,
+                    newStart: newStart,
+                    newEnd: newEnd,
+                    syncKey: action.syncKey
+                )
+            )
+        }
+    }
+    return items
+}
+

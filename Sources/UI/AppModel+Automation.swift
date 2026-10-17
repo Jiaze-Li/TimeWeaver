@@ -1,12 +1,14 @@
 import Foundation
 import AppKit
+import SwiftUI
+
 
 extension AppModel {
     func rescheduleTimer() {
         timer?.invalidate()
         timer = nil
         guard ui.autoSyncEnabled else { return }
-        let minutes = max(Int(ui.autoSyncMinutes) ?? 15, 1)
+        let minutes = max(Int(ui.autoSyncMinutes) ?? defaultAutoSyncMinutes, 1)
         timer = Timer.scheduledTimer(withTimeInterval: Double(minutes * 60), repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor [self] in
@@ -17,15 +19,6 @@ extension AppModel {
 
     private func runAutomatedSync() {
         triggerAutomatedSync()
-    }
-
-    func triggerAutomatedSync() {
-        if ui.isBusy { return }
-        if ui.confirmBeforeSync {
-            ui.status = "Auto sync is waiting for manual confirmation"
-            return
-        }
-        previewForAutomatedDeletionSafety()
     }
 
     func prepareSyncConfirmation() {
@@ -155,7 +148,12 @@ extension AppModel {
         }
     }
 
-    private func previewForAutomatedDeletionSafety() {
+    func triggerAutomatedSync() {
+        if ui.isBusy { return }
+        checkAndReviewCalendarChanges()
+    }
+
+    func checkAndReviewCalendarChanges() {
         if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
@@ -178,46 +176,153 @@ extension AppModel {
                 ui.pendingAIReviews = pendingReviews(from: result.reports)
                 applySourceStatuses(from: result.reports)
 
-                let hasSuspiciousDeletion = result.reports.contains { $0.isSuspiciousDeletion }
-                let deleteCount = result.reports.reduce(0) { count, report in
-                    count + report.actions.filter { $0.status == "would delete" }.count
-                }
                 let hasErrors = result.reports.contains { $0.errorMessage != nil }
-                let hasChanges = result.reports.contains { report in
-                    report.actions.contains { ["would create", "would update", "would delete"].contains($0.status) }
-                }
-
                 if hasErrors {
                     ui.status = "Auto sync found source errors"
-                } else if !ui.pendingAIReviews.isEmpty {
-                    ui.status = "Auto sync is waiting for AI approval"
-                } else if hasSuspiciousDeletion {
-                    ui.status = "Auto sync paused: 0 bookings parsed with scheduled events present"
-                } else if deleteCount > 0 && ui.confirmBeforeDeletion {
-                    ui.status = "Auto sync found removed events waiting for manual confirmation"
-                } else if hasChanges {
-                    let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
-                    ui.pendingSyncPlan = SyncPlan(
-                        reports: result.reports,
-                        extractions: result.extractions,
-                        outputText: result.outputText,
-                        sources: enabledSources,
-                        upcomingOnly: ui.upcomingOnly,
-                        workdayHours: workdayHours
-                    )
                     ui.isBusy = false
-                    runSync(previewOnly: false)
                     return
-                } else {
-                    ui.status = "Auto sync checked: no changes"
                 }
+                if !ui.pendingAIReviews.isEmpty {
+                    ui.status = "Auto sync is waiting for AI approval"
+                    ui.isBusy = false
+                    return
+                }
+
+                let items = buildAutoReviewChangeItems(from: result.reports)
+                if items.isEmpty {
+                    ui.status = "Auto sync checked: no changes"
+                    ui.isBusy = false
+                    return
+                }
+
+                let fingerprint = computeChangeFingerprint(for: items)
+                if fingerprint == dismissedChangeFingerprint {
+                    ui.status = "Auto sync checked: proposed changes already reviewed and dismissed"
+                    ui.isBusy = false
+                    return
+                }
+
+                let suspiciousReports = result.reports.filter(\.isSuspiciousDeletion)
+                let authorizedIDs = Set(suspiciousReports.map(\.sourceItemID))
+                let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
+                let plan = SyncPlan(
+                    reports: result.reports,
+                    extractions: result.extractions,
+                    outputText: result.outputText,
+                    sources: enabledSources,
+                    upcomingOnly: ui.upcomingOnly,
+                    workdayHours: workdayHours
+                )
+
+                let review = PendingAutoReview(
+                    items: items,
+                    fingerprint: fingerprint,
+                    plan: plan,
+                    authorizedDeletionSourceIDs: authorizedIDs
+                )
+
+                ui.pendingSyncPlan = plan
+                ui.isBusy = false
+                presentAutoReview(review)
             } catch {
                 ui.output = error.localizedDescription
                 clearLoadingStatuses()
                 ui.status = error.localizedDescription
+                ui.isBusy = false
             }
-            ui.isBusy = false
         }
+    }
+
+
+    func buildAutoReviewChangeItems(from reports: [SourceSyncReport], existingState: SyncState? = nil) -> [AutoReviewChangeItem] {
+        buildAutoReviewItems(from: reports, existingState: existingState ?? SettingsStore.loadState())
+    }
+
+
+
+
+    func computeChangeFingerprint(for items: [AutoReviewChangeItem]) -> String {
+        TimeWeaverCore.computeChangeFingerprint(
+            items: items.map { item in
+                (
+                    sourceName: item.sourceName,
+                    calendarName: item.calendarName,
+                    status: item.status,
+                    title: item.title,
+                    oldStartTimestamp: item.oldStart?.timeIntervalSince1970 ?? 0,
+                    oldEndTimestamp: item.oldEnd?.timeIntervalSince1970 ?? 0,
+                    newStartTimestamp: item.newStart?.timeIntervalSince1970 ?? 0,
+                    newEndTimestamp: item.newEnd?.timeIntervalSince1970 ?? 0,
+                    syncKey: item.syncKey
+                )
+            }
+        )
+    }
+
+    func presentAutoReview(_ review: PendingAutoReview) {
+        ui.pendingAutoReview = review
+        ui.status = "Review calendar changes"
+
+        if autoReviewWindowController == nil {
+            let contentView = AutoReviewWindowView(review: review).environmentObject(self)
+            let hosting = NSHostingController(rootView: contentView)
+            let window = NSWindow(contentViewController: hosting)
+            window.title = "Review Calendar Changes"
+            window.styleMask = [.titled, .closable, .resizable]
+            window.setContentSize(NSSize(width: 580, height: 380))
+            window.center()
+            window.isReleasedWhenClosed = false
+
+            final class WindowCloseDelegate: NSObject, NSWindowDelegate {
+                weak var model: AppModel?
+                init(model: AppModel) { self.model = model }
+                func windowWillClose(_ notification: Notification) {
+                    model?.handleAutoReviewWindowClosed()
+                }
+            }
+
+            let delegate = WindowCloseDelegate(model: self)
+            window.delegate = delegate
+            objc_setAssociatedObject(window, "WindowCloseDelegate", delegate, .OBJC_ASSOCIATION_RETAIN)
+
+            autoReviewWindowController = NSWindowController(window: window)
+        } else if let window = autoReviewWindowController?.window {
+            let contentView = AutoReviewWindowView(review: review).environmentObject(self)
+            window.contentViewController = NSHostingController(rootView: contentView)
+        }
+
+        autoReviewWindowController?.showWindow(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func acceptAutoReview() {
+        guard let review = ui.pendingAutoReview else { return }
+        closeAutoReviewWindow()
+        dismissedChangeFingerprint = nil
+        ui.pendingSyncPlan = review.plan
+        runSync(previewOnly: false, authorizedDeletionSourceIDs: review.authorizedDeletionSourceIDs)
+    }
+
+    func ignoreAutoReview() {
+        guard let review = ui.pendingAutoReview else { return }
+        dismissedChangeFingerprint = review.fingerprint
+        closeAutoReviewWindow()
+        invalidatePendingSyncPlan()
+        ui.status = "Auto sync changes ignored"
+    }
+
+    func handleAutoReviewWindowClosed() {
+        if let review = ui.pendingAutoReview {
+            dismissedChangeFingerprint = review.fingerprint
+            ui.pendingAutoReview = nil
+            invalidatePendingSyncPlan()
+            ui.status = "Auto sync changes ignored"
+        }
+    }
+
+    func closeAutoReviewWindow() {
+        ui.pendingAutoReview = nil
+        autoReviewWindowController?.close()
     }
 
     func runLaunchAutomationIfNeeded() {

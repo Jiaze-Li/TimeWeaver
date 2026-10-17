@@ -39,7 +39,8 @@ let package = Package(
                 "UI/AppModel+SyncFlow.swift",
                 "UI/Components",
                 "UI/ContentView.swift",
-                "UI/ImageImportReviewSheet.swift"
+                "UI/ImageImportReviewSheet.swift",
+                "UI/AutoReviewWindowView.swift"
             ],
             sources: [
                 "Models/AppIdentity.swift",

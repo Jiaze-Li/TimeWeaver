@@ -34,7 +34,7 @@ extension AppModel {
             workdayHours: resolvedWorkdayHours,
             schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
             autoSyncEnabled: ui.autoSyncEnabled,
-            autoSyncMinutes: max(Int(ui.autoSyncMinutes) ?? 15, 1),
+            autoSyncMinutes: max(Int(ui.autoSyncMinutes) ?? defaultAutoSyncMinutes, 1),
             upcomingOnly: ui.upcomingOnly,
             confirmBeforeSync: ui.confirmBeforeSync,
             confirmBeforeDeletion: ui.confirmBeforeDeletion,
