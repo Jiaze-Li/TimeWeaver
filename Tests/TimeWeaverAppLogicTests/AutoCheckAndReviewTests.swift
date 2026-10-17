@@ -315,4 +315,141 @@ final class AutoCheckAndReviewTests: XCTestCase {
         XCTAssertNotNil(report.errorMessage)
         XCTAssertTrue(report.actions.isEmpty)
     }
+
+    private func makeAutoReviewSyncFixture() -> (
+        engine: CalendarSyncEngine,
+        calendar: FakeCalendarStore,
+        state: MemorySyncStateStore,
+        source: SourceItem,
+        extraction: ExtractionResult,
+        start: Date,
+        end: Date
+    ) {
+        let calendar = FakeCalendarStore()
+        _ = calendar.addCalendar(title: "Experiment")
+        let state = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: calendar, stateStore: state)
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "ppms",
+            source: "/path/to/review-test.xlsx",
+            bookingID: "LJZ",
+            calendar: "Experiment"
+        )
+        let start = makeDate(day: 21, hour: 9)
+        let end = makeDate(day: 21, hour: 10)
+        let event = ReservationEvent(
+            syncKey: "approved-booking",
+            legacySyncKey: nil,
+            sourceID: source.id.uuidString,
+            sourceName: "Approved Booking",
+            sourceLink: "",
+            bookingID: "LJZ",
+            calendarName: "Experiment",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+        let extraction = ExtractionResult(
+            allEvents: [event],
+            filteredEvents: [event],
+            filteredPastCount: 0,
+            parserLabel: "Rule",
+            parserNotes: [],
+            reviewRequired: false
+        )
+        return (engine, calendar, state, source, extraction, start, end)
+    }
+
+    func testApprovedAutoReviewAppliesExactlyReviewedChanges() async throws {
+        let f = makeAutoReviewSyncFixture()
+        let cached = [f.source.id: f.extraction]
+        let preview = try await f.engine.sync(
+            sources: [f.source],
+            workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false,
+            previewOnly: true,
+            parserMode: .rulesOnly,
+            aiConfiguration: nil,
+            aiApprovals: [],
+            schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cached
+        )
+        let reviewed = buildAutoReviewItems(from: preview.reports, existingState: f.state.loadState())
+        XCTAssertEqual(reviewed.map(\.status), ["would create"])
+
+        _ = try await f.engine.sync(
+            sources: [f.source],
+            workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false,
+            previewOnly: false,
+            parserMode: .rulesOnly,
+            aiConfiguration: nil,
+            aiApprovals: [],
+            schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cached,
+            expectedAutoReviewItems: reviewed
+        )
+        XCTAssertEqual(f.calendar.storedEvents.count, 1)
+        XCTAssertEqual(f.state.loadState().events.count, 1)
+    }
+
+    func testAutoReviewRejectsExternalCalendarChangeBeforeWrites() async throws {
+        let f = makeAutoReviewSyncFixture()
+        let cached = [f.source.id: f.extraction]
+        let preview = try await f.engine.sync(
+            sources: [f.source],
+            workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false,
+            previewOnly: true,
+            parserMode: .rulesOnly,
+            aiConfiguration: nil,
+            aiApprovals: [],
+            schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cached
+        )
+        let reviewed = buildAutoReviewItems(from: preview.reports, existingState: f.state.loadState())
+        XCTAssertEqual(reviewed.map(\.status), ["would create"])
+
+        // Another sync wrote the event, then the calendar time changed externally.
+        _ = try await f.engine.sync(
+            sources: [f.source],
+            workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false,
+            previewOnly: false,
+            parserMode: .rulesOnly,
+            aiConfiguration: nil,
+            aiApprovals: [],
+            schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cached
+        )
+        let changedEvent = try XCTUnwrap(f.calendar.storedEvents.values.first)
+        let externalStart = f.start.addingTimeInterval(3600)
+        changedEvent.startDate = externalStart
+        changedEvent.endDate = f.end.addingTimeInterval(3600)
+
+        do {
+            _ = try await f.engine.sync(
+                sources: [f.source],
+                workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+                upcomingOnly: false,
+                previewOnly: false,
+                parserMode: .rulesOnly,
+                aiConfiguration: nil,
+                aiApprovals: [],
+                schedulingTimeZoneIdentifier: "Asia/Singapore",
+                cachedExtractions: cached,
+                expectedAutoReviewItems: reviewed
+            )
+            XCTFail("A changed calendar must require a fresh review")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("review"))
+        }
+        XCTAssertEqual(f.calendar.storedEvents.count, 1)
+        XCTAssertEqual(f.calendar.storedEvents.values.first?.startDate, externalStart)
+        XCTAssertEqual(f.state.loadState().events.count, 1)
+    }
 }

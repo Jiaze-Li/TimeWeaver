@@ -13,6 +13,7 @@ final class AppModel: ObservableObject {
     var timer: Timer?
     var persistTask: Task<Void, Never>?
     var dismissedChangeFingerprint: String?
+    @Published var isCheckingAutomatically = false
     var autoReviewWindowController: NSWindowController?
 
     init(calendarSyncEngine: CalendarSyncEngine = CalendarSyncEngine()) {

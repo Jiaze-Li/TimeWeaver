@@ -31,7 +31,11 @@ extension AppModel {
         }
     }
 
-    func runSync(previewOnly: Bool, authorizedDeletionSourceIDs: Set<UUID> = []) {
+    func runSync(
+        previewOnly: Bool,
+        authorizedDeletionSourceIDs: Set<UUID> = [],
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
+    ) {
         if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
@@ -65,7 +69,8 @@ extension AppModel {
                     upcomingOnly: ui.upcomingOnly,
                     previewOnly: previewOnly,
                     cachedExtractions: cachedExtractions,
-                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
+                    expectedAutoReviewItems: expectedAutoReviewItems
                 )
                 if previewOnly {
                     ui.output = result.outputText

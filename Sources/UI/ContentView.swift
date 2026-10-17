@@ -54,7 +54,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var syncLoadingOverlay: some View {
-        if model.ui.isBusy {
+        if model.ui.isBusy && !model.isCheckingAutomatically {
             ZStack {
                 Color.black.opacity(0.25)
                     .ignoresSafeArea()

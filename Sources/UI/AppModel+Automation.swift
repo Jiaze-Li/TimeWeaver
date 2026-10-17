@@ -161,11 +161,16 @@ extension AppModel {
             return
         }
 
+        isCheckingAutomatically = true
         ui.isBusy = true
         ui.status = "Checking automated sync changes..."
         setLoadingStatuses(for: enabledSources)
 
         Task {
+            defer {
+                ui.isBusy = false
+                isCheckingAutomatically = false
+            }
             do {
                 let result = try await performSync(
                     sources: enabledSources,
@@ -179,26 +184,22 @@ extension AppModel {
                 let hasErrors = result.reports.contains { $0.errorMessage != nil }
                 if hasErrors {
                     ui.status = "Auto sync found source errors"
-                    ui.isBusy = false
                     return
                 }
                 if !ui.pendingAIReviews.isEmpty {
                     ui.status = "Auto sync is waiting for AI approval"
-                    ui.isBusy = false
                     return
                 }
 
                 let items = buildAutoReviewChangeItems(from: result.reports)
                 if items.isEmpty {
                     ui.status = "Auto sync checked: no changes"
-                    ui.isBusy = false
                     return
                 }
 
                 let fingerprint = computeChangeFingerprint(for: items)
                 if fingerprint == dismissedChangeFingerprint || fingerprint == ui.pendingAutoReview?.fingerprint {
                     ui.status = "Auto sync checked: proposed changes already reviewed and dismissed"
-                    ui.isBusy = false
                     return
                 }
 
@@ -223,13 +224,11 @@ extension AppModel {
                 )
 
                 ui.pendingSyncPlan = plan
-                ui.isBusy = false
                 presentAutoReview(review)
             } catch {
                 ui.output = error.localizedDescription
                 clearLoadingStatuses()
                 ui.status = error.localizedDescription
-                ui.isBusy = false
             }
         }
     }
@@ -299,10 +298,26 @@ extension AppModel {
     func acceptAutoReview() {
         if ui.isBusy { return }
         guard let review = ui.pendingAutoReview else { return }
+
+        let enabledSources = ui.sources.filter(\.enabled)
+        let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
+        guard ui.pendingSyncPlan?.id == review.plan.id,
+              review.plan.isValid(for: enabledSources, upcomingOnly: ui.upcomingOnly, workdayHours: workdayHours) else {
+            closeAutoReviewWindow()
+            invalidatePendingSyncPlan()
+            ui.status = "Review outdated. Checking current changes again..."
+            checkAndReviewCalendarChanges()
+            return
+        }
+
         closeAutoReviewWindow()
         dismissedChangeFingerprint = nil
         ui.pendingSyncPlan = review.plan
-        runSync(previewOnly: false, authorizedDeletionSourceIDs: review.authorizedDeletionSourceIDs)
+        runSync(
+            previewOnly: false,
+            authorizedDeletionSourceIDs: review.authorizedDeletionSourceIDs,
+            expectedAutoReviewItems: review.items
+        )
     }
 
 
