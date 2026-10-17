@@ -62,7 +62,8 @@ extension AppModel {
                     return
                 }
 
-                guard let plan = buildImageImportPlan(source: source, report: report, previewOutput: preview.outputText) else {
+                let extraction = preview.extractions[source.id]
+                guard let plan = buildImageImportPlan(source: source, report: report, previewOutput: preview.outputText, extraction: extraction) else {
                     ui.output = preview.outputText
                     ui.status = "No matching \(source.bookingID) schedule items found in the dropped image"
                     ui.isBusy = false
@@ -71,8 +72,14 @@ extension AppModel {
 
                 let entries = report.actions
                     .filter { ["would create", "would update", "would delete"].contains($0.status) }
-                    .map { ImageImportEventEntry(title: $0.title, originalTitle: $0.title,
-                                                start: $0.start, end: $0.end, status: $0.status) }
+                    .map { ImageImportEventEntry(
+                        syncKey: $0.syncKey,
+                        title: $0.title,
+                        originalTitle: $0.title,
+                        start: $0.start,
+                        end: $0.end,
+                        status: $0.status
+                    ) }
                 ui.output = plan.previewOutput
                 ui.status = "Read \(plan.matchedCount) \(plan.matchedCount == 1 ? "schedule item" : "schedule items") — review and confirm below"
                 ui.pendingImageImportReview = ImageImportReview(plan: plan, entries: entries)
@@ -107,7 +114,12 @@ extension AppModel {
         )
     }
 
-    private func buildImageImportPlan(source: SourceItem, report: SourceSyncReport, previewOutput: String) -> ImageImportPlan? {
+    private func buildImageImportPlan(
+        source: SourceItem,
+        report: SourceSyncReport,
+        previewOutput: String,
+        extraction: ExtractionResult? = nil
+    ) -> ImageImportPlan? {
         guard report.totalMatchedCount > 0 else {
             return nil
         }
@@ -128,7 +140,8 @@ extension AppModel {
             reviewRequired: report.reviewRequired,
             workbookFingerprint: report.workbookFingerprint,
             previewOutput: previewOutput,
-            sampleIntervals: Array(sampleIntervals.prefix(8))
+            sampleIntervals: Array(sampleIntervals.prefix(8)),
+            extraction: extraction
         )
     }
 
@@ -149,10 +162,25 @@ extension AppModel {
 
     func confirmImageImportReview(entries: [ImageImportEventEntry]) {
         guard let review = ui.pendingImageImportReview, !ui.isBusy else { return }
-        let titleOverrides: [Date: String] = Dictionary(
-            entries.filter { $0.title != $0.originalTitle }.map { ($0.start, $0.title) },
-            uniquingKeysWith: { first, _ in first }
-        )
+
+        for entry in entries {
+            guard TimeWeaverCore.validateTimeInterval(start: entry.start, end: entry.end) else {
+                ui.status = "Start time must be before end time for '\(entry.title)'"
+                return
+            }
+        }
+
+        var eventOverrides: [String: EventOverride] = [:]
+        for entry in entries {
+            if entry.title != entry.originalTitle || entry.start != entry.originalStart || entry.end != entry.originalEnd {
+                eventOverrides[entry.syncKey] = EventOverride(
+                    title: entry.title,
+                    start: entry.start,
+                    end: entry.end
+                )
+            }
+        }
+
         let plan = review.plan
         ui.pendingImageImportReview = nil
         ui.isBusy = true
@@ -161,12 +189,17 @@ extension AppModel {
             do {
                 let sourceKey = sourceIdentity(for: plan.source)
                 let beforeSnapshot = SettingsStore.loadState().events.filter { $0.value.sourceID == sourceKey }
+                var cachedExtractions: [UUID: ExtractionResult] = [:]
+                if let extraction = plan.extraction {
+                    cachedExtractions[plan.source.id] = extraction
+                }
                 let syncResult = try await performSync(
                     sources: [plan.source],
                     upcomingOnly: false,
                     previewOnly: false,
                     aiApprovals: imageImportApprovals(for: plan),
-                    titleOverrides: titleOverrides
+                    eventOverrides: eventOverrides,
+                    cachedExtractions: cachedExtractions
                 )
                 let afterSnapshot = SettingsStore.loadState().events.filter { $0.value.sourceID == sourceKey }
                 if !afterSnapshot.isEmpty || !beforeSnapshot.isEmpty {

@@ -11,7 +11,9 @@ extension CalendarSyncEngine {
         aiConfiguration: AIServiceConfiguration?,
         aiApprovals: [AIApprovalRecord],
         schedulingTimeZoneIdentifier: String,
-        titleOverrides: [Date: String] = [:]
+        eventOverrides: [String: EventOverride] = [:],
+        cachedExtractions: [UUID: ExtractionResult] = [:],
+        authorizedDeletionSourceIDs: Set<UUID> = []
     ) async throws -> SyncRunResult {
         try await ensureAccess()
         let schedulingTimeZone = TimeZone(identifier: schedulingTimeZoneIdentifier) ?? .current
@@ -19,22 +21,29 @@ extension CalendarSyncEngine {
         var state = stateStore.loadState()
         var reports: [SourceSyncReport] = []
         var lines: [String] = []
+        var extractions: [UUID: ExtractionResult] = cachedExtractions
 
         for source in sources where source.enabled {
             do {
-                let extractor = ReservationExtractor(
-                    aiNormalizer: aiNormalizer,
-                    localImageParser: localImageParser
-                )
-                let extraction = try await extractor.extract(
-                    source: source,
-                    workdayHours: workdayHours,
-                    upcomingOnly: upcomingOnly,
-                    parserMode: parserMode,
-                    aiConfiguration: aiConfiguration,
-                    timeZone: schedulingTimeZone,
-                    referenceDate: referenceDate
-                )
+                let extraction: ExtractionResult
+                if let cached = cachedExtractions[source.id] {
+                    extraction = cached
+                } else {
+                    let extractor = ReservationExtractor(
+                        aiNormalizer: aiNormalizer,
+                        localImageParser: localImageParser
+                    )
+                    extraction = try await extractor.extract(
+                        source: source,
+                        workdayHours: workdayHours,
+                        upcomingOnly: upcomingOnly,
+                        parserMode: parserMode,
+                        aiConfiguration: aiConfiguration,
+                        timeZone: schedulingTimeZone,
+                        referenceDate: referenceDate
+                    )
+                    extractions[source.id] = extraction
+                }
                 let report = try syncSource(
                     source: source,
                     extraction: extraction,
@@ -42,7 +51,8 @@ extension CalendarSyncEngine {
                     upcomingOnly: upcomingOnly,
                     previewOnly: previewOnly,
                     aiApprovals: aiApprovals,
-                    titleOverrides: titleOverrides
+                    eventOverrides: eventOverrides,
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
                 )
                 reports.append(report)
 
@@ -120,6 +130,6 @@ extension CalendarSyncEngine {
         if !previewOnly {
             stateStore.saveState(state)
         }
-        return SyncRunResult(reports: reports, outputText: lines.joined(separator: "\n"))
+        return SyncRunResult(reports: reports, outputText: lines.joined(separator: "\n"), extractions: extractions)
     }
 }

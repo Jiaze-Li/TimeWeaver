@@ -34,6 +34,7 @@ struct UIState {
     var pendingImageImportReview: ImageImportReview?
     var pendingAIReviews: [PendingAIReview]
     var pendingSyncConfirmation: PendingSyncConfirmation?
+    var pendingSyncPlan: SyncPlan?
     var showAdvancedAISettings: Bool
 
     static func initial(
@@ -95,6 +96,7 @@ struct UIState {
             pendingImageImportReview: nil,
             pendingAIReviews: [],
             pendingSyncConfirmation: nil,
+            pendingSyncPlan: nil,
             showAdvancedAISettings: false
         )
     }

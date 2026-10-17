@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(TimeWeaverCore)
+import TimeWeaverCore
+#endif
 
 private let primaryEventURLScheme = "timeweaver-sync"
 private let legacyEventURLScheme = "ppms-sync"
@@ -496,11 +499,16 @@ struct ReservationExtractor {
 }
 
 func sourceIdentity(for source: SourceItem) -> String {
-    digest("\(source.name)|\(source.source)|\(source.bookingID)|\(source.calendar)")
+    source.stableIdentity
+}
+
+func legacySourceIdentity(for source: SourceItem) -> String {
+    source.legacyIdentity
 }
 
 func mergeReservationOccurrences(occurrences: [SlotOccurrence], source: SourceItem) -> [ReservationEvent] {
     let sourceID = sourceIdentity(for: source)
+    let legacySourceID = legacySourceIdentity(for: source)
     var merged: [ReservationEvent] = []
 
     for occurrence in occurrences {
@@ -508,13 +516,16 @@ func mergeReservationOccurrences(occurrences: [SlotOccurrence], source: SourceIt
             current.end = max(current.end, occurrence.end)
             current.sheetNames.append(occurrence.sheetName)
             current.cellReferences.append(occurrence.cellReference)
-            current.syncKey = digest("\(sourceID)|\(current.sheetNames.joined(separator: ","))|\(current.cellReferences.joined(separator: ","))|\(source.bookingID)")
+            current.syncKey = digest("\(sourceID)|\(current.sheetNames.joined(separator: ","))|\(current.cellReferences.joined(separator: ","))")
+            current.legacySyncKey = digest("\(legacySourceID)|\(current.sheetNames.joined(separator: ","))|\(current.cellReferences.joined(separator: ","))|\(source.bookingID)")
             merged[merged.count - 1] = current
         } else {
-            let syncKey = digest("\(sourceID)|\(occurrence.sheetName)|\(occurrence.cellReference)|\(source.bookingID)")
+            let syncKey = digest("\(sourceID)|\(occurrence.sheetName)|\(occurrence.cellReference)")
+            let legacySyncKey = digest("\(legacySourceID)|\(occurrence.sheetName)|\(occurrence.cellReference)|\(source.bookingID)")
             merged.append(
                 ReservationEvent(
                     syncKey: syncKey,
+                    legacySyncKey: legacySyncKey,
                     sourceID: sourceID,
                     sourceName: source.name,
                     sourceLink: source.source,

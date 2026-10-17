@@ -10,6 +10,42 @@ struct SourceItem: Codable, Identifiable, Equatable {
     var source: String
     var bookingID: String
     var calendar: String
+
+    init(
+        id: UUID = UUID(),
+        enabled: Bool = true,
+        name: String,
+        source: String,
+        bookingID: String,
+        calendar: String
+    ) {
+        self.id = id
+        self.enabled = enabled
+        self.name = name
+        self.source = source
+        self.bookingID = bookingID
+        self.calendar = calendar
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        self.name = try container.decode(String.self, forKey: .name)
+        self.source = try container.decode(String.self, forKey: .source)
+        self.bookingID = try container.decode(String.self, forKey: .bookingID)
+        self.calendar = try container.decode(String.self, forKey: .calendar)
+    }
+}
+
+extension SourceItem {
+    var stableIdentity: String {
+        id.uuidString
+    }
+
+    var legacyIdentity: String {
+        TimeWeaverCore.fnv1a64Hex("\(name)|\(source)|\(bookingID)|\(calendar)")
+    }
 }
 
 extension SourceItem {

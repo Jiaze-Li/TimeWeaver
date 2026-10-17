@@ -14,13 +14,13 @@ extension AppModel {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         beginBusyTask(status: "Undoing last image import...")
-        ui.lastImageImportUndo = nil
         Task {
             do {
                 let summary = try await calendarSyncEngine.revertImageImport(
                     record: record,
                     schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
                 )
+                ui.lastImageImportUndo = nil
                 ui.output = summary
                 ui.status = "Import undone"
             } catch {
@@ -31,7 +31,7 @@ extension AppModel {
         }
     }
 
-    func runSync(previewOnly: Bool) {
+    func runSync(previewOnly: Bool, authorizedDeletionSourceIDs: Set<UUID> = []) {
         if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
@@ -53,16 +53,30 @@ extension AppModel {
         beginBusyTask(status: previewOnly ? "Previewing..." : "Syncing...")
         setLoadingStatuses(for: enabledSources)
         let syncStartedAt = Date()
+        let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
+        let canUseCache = !previewOnly && (ui.pendingSyncPlan?.isValid(for: enabledSources, upcomingOnly: ui.upcomingOnly, workdayHours: workdayHours) ?? false)
+        let cachedExtractions = canUseCache ? (ui.pendingSyncPlan?.extractions ?? [:]) : [:]
+        ui.pendingSyncPlan = nil
 
         Task {
             do {
                 let result = try await performSync(
                     sources: enabledSources,
                     upcomingOnly: ui.upcomingOnly,
-                    previewOnly: previewOnly
+                    previewOnly: previewOnly,
+                    cachedExtractions: cachedExtractions,
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
                 )
                 if previewOnly {
                     ui.output = result.outputText
+                    ui.pendingSyncPlan = SyncPlan(
+                        reports: result.reports,
+                        extractions: result.extractions,
+                        outputText: result.outputText,
+                        sources: enabledSources,
+                        upcomingOnly: ui.upcomingOnly,
+                        workdayHours: workdayHours
+                    )
                 } else {
                     ui.output = "Sync at \(syncTimestampString(syncStartedAt))\n" + result.outputText
                 }
@@ -81,6 +95,7 @@ extension AppModel {
                 ui.output = error.localizedDescription
                 if previewOnly {
                     ui.pendingAIReviews = []
+                    ui.pendingSyncPlan = nil
                 }
                 clearLoadingStatuses()
                 ui.status = error.localizedDescription

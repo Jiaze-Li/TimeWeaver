@@ -80,6 +80,7 @@ extension AppModel {
         }
 
         ui.selectedSourceID = item.id
+        invalidatePendingSyncPlan()
         reconcileSourceStatuses()
         persistSettings()
         ui.status = "Source saved"
@@ -90,6 +91,7 @@ extension AppModel {
               let index = ui.sources.firstIndex(where: { $0.id == selectedSourceID }) else { return }
         ui.sources.remove(at: index)
         ui.sourceStatuses.removeValue(forKey: selectedSourceID)
+        invalidatePendingSyncPlan()
         if let next = ui.sources.first {
             selectSource(next)
         } else {
@@ -101,6 +103,7 @@ extension AppModel {
     }
 
     func workdayChanged() {
+        invalidatePendingSyncPlan()
         schedulePersist()
     }
 
@@ -117,11 +120,13 @@ extension AppModel {
     }
 
     func automationChanged() {
+        invalidatePendingSyncPlan()
         schedulePersist()
         rescheduleTimer()
     }
 
     func parserSettingsChanged() {
+        invalidatePendingSyncPlan()
         schedulePersist()
     }
 
@@ -130,13 +135,19 @@ extension AppModel {
     }
 
     func confirmPendingSync() {
+        let authorizedIDs = ui.pendingSyncConfirmation?.authorizedDeletionSourceIDs ?? []
         ui.pendingSyncConfirmation = nil
-        runSync(previewOnly: false)
+        runSync(previewOnly: false, authorizedDeletionSourceIDs: authorizedIDs)
     }
 
     func cancelPendingSync() {
         ui.pendingSyncConfirmation = nil
+        invalidatePendingSyncPlan()
         ui.status = "Sync cancelled"
+    }
+
+    func invalidatePendingSyncPlan() {
+        ui.pendingSyncPlan = nil
     }
 
     func aiProviderChanged() {
