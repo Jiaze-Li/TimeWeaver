@@ -135,7 +135,7 @@ struct AppSettings: Codable {
         self.schedulingTimeZoneIdentifier = try container.decodeIfPresent(String.self, forKey: .schedulingTimeZoneIdentifier)
             ?? defaultSchedulingTimeZoneIdentifier
         self.autoSyncEnabled = try container.decodeIfPresent(Bool.self, forKey: .autoSyncEnabled) ?? false
-        self.autoSyncMinutes = try container.decodeIfPresent(Int.self, forKey: .autoSyncMinutes) ?? 15
+        self.autoSyncMinutes = try container.decodeIfPresent(Int.self, forKey: .autoSyncMinutes) ?? defaultAutoSyncMinutes
         self.upcomingOnly = try container.decodeIfPresent(Bool.self, forKey: .upcomingOnly) ?? true
         self.confirmBeforeSync = try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeSync) ?? true
         self.confirmBeforeDeletion = try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeDeletion) ?? true

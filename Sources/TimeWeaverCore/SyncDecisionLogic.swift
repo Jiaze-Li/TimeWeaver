@@ -99,6 +99,15 @@ public enum TimeWeaverCore {
         return String(format: "%016llx", hash)
     }
 
+    public static func computeChangeFingerprint(
+        items: [(sourceName: String, calendarName: String, status: String, title: String, oldStartTimestamp: Double, oldEndTimestamp: Double, newStartTimestamp: Double, newEndTimestamp: Double, syncKey: String)]
+    ) -> String {
+        let lines = items.map { item in
+            "\(item.sourceName)|\(item.calendarName)|\(item.status)|\(item.title)|\(item.oldStartTimestamp)|\(item.oldEndTimestamp)|\(item.newStartTimestamp)|\(item.newEndTimestamp)|\(item.syncKey)"
+        }.sorted()
+        return fnv1a64Hex(lines.joined(separator: "\n"))
+    }
+
     // MARK: - Slot Rule Parsing
 
     public struct SlotRule: Codable, Equatable {

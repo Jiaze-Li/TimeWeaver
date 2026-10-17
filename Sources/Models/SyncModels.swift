@@ -102,6 +102,27 @@ struct PendingSyncConfirmation: Identifiable {
     var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 
+struct AutoReviewChangeItem: Identifiable, Equatable {
+    var id: String { "\(sourceName)|\(status)|\(title)|\(syncKey)" }
+    var sourceName: String
+    var calendarName: String
+    var status: String
+    var title: String
+    var oldStart: Date?
+    var oldEnd: Date?
+    var newStart: Date?
+    var newEnd: Date?
+    var syncKey: String
+}
+
+struct PendingAutoReview: Identifiable {
+    var id = UUID()
+    var items: [AutoReviewChangeItem]
+    var fingerprint: String
+    var plan: SyncPlan
+    var authorizedDeletionSourceIDs: Set<UUID> = []
+}
+
 struct ImageImportUndoRecord {
     var sourceIdentityKey: String
     var calendarName: String

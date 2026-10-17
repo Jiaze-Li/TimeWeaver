@@ -40,6 +40,7 @@ final class UIStateAndSettingsCoordinatorTests: XCTestCase {
         XCTAssertFalse(state.isCalendarLoading)
         XCTAssertEqual(state.pendingAIReviews.count, 0)
         XCTAssertNil(state.pendingSyncConfirmation)
+        XCTAssertNil(state.pendingAutoReview)
     }
 
     func testSettingsCoordinatorSkipsDuplicatePersistPayload() {

@@ -34,6 +34,7 @@ struct UIState {
     var pendingImageImportReview: ImageImportReview?
     var pendingAIReviews: [PendingAIReview]
     var pendingSyncConfirmation: PendingSyncConfirmation?
+    var pendingAutoReview: PendingAutoReview?
     var pendingSyncPlan: SyncPlan?
     var showAdvancedAISettings: Bool
 
@@ -96,6 +97,7 @@ struct UIState {
             pendingImageImportReview: nil,
             pendingAIReviews: [],
             pendingSyncConfirmation: nil,
+            pendingAutoReview: nil,
             pendingSyncPlan: nil,
             showAdvancedAISettings: false
         )

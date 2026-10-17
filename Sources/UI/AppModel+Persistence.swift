@@ -34,7 +34,7 @@ extension AppModel {
             workdayHours: resolvedWorkdayHours,
             schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
             autoSyncEnabled: ui.autoSyncEnabled,
-            autoSyncMinutes: max(Int(ui.autoSyncMinutes) ?? 15, 1),
+            autoSyncMinutes: max(Int(ui.autoSyncMinutes) ?? defaultAutoSyncMinutes, 1),
             upcomingOnly: ui.upcomingOnly,
             confirmBeforeSync: ui.confirmBeforeSync,
             confirmBeforeDeletion: ui.confirmBeforeDeletion,
@@ -106,7 +106,8 @@ extension AppModel {
         aiApprovals: [AIApprovalRecord]? = nil,
         eventOverrides: [String: EventOverride] = [:],
         cachedExtractions: [UUID: ExtractionResult] = [:],
-        authorizedDeletionSourceIDs: Set<UUID> = []
+        authorizedDeletionSourceIDs: Set<UUID> = [],
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
     ) async throws -> SyncRunResult {
         try await calendarSyncEngine.sync(
             sources: sources,
@@ -119,7 +120,8 @@ extension AppModel {
             schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
             eventOverrides: eventOverrides,
             cachedExtractions: cachedExtractions,
-            authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
+            authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
+            expectedAutoReviewItems: expectedAutoReviewItems
         )
     }
 

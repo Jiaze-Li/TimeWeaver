@@ -3,6 +3,7 @@ import Foundation
 let defaultSchedulingTimeZoneIdentifier = "Asia/Singapore"
 let defaultBookingID = "LJZ"
 let defaultCalendarName = "Experiment"
+let defaultAutoSyncMinutes = 10
 
 func builtinSlotRules() -> [SlotRule] {
     [

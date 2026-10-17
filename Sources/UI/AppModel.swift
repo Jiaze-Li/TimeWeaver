@@ -12,6 +12,9 @@ final class AppModel: ObservableObject {
     let launchAutomation = LaunchAutomation.load()
     var timer: Timer?
     var persistTask: Task<Void, Never>?
+    var dismissedChangeFingerprint: String?
+    @Published var isCheckingAutomatically = false
+    var autoReviewWindowController: NSWindowController?
 
     init(calendarSyncEngine: CalendarSyncEngine = CalendarSyncEngine()) {
         self.calendarSyncEngine = calendarSyncEngine
@@ -94,7 +97,15 @@ final class AppModel: ObservableObject {
     deinit {
         timer?.invalidate()
         persistTask?.cancel()
+        let controller = autoReviewWindowController
+        if let controller {
+            Task { @MainActor in
+                controller.close()
+            }
+        }
     }
+
+
 
     /// Shared entry point for the "start a busy async task" triplet (isBusy/output/status),
     /// so every long-running action begins from the same, single guarded state transition.

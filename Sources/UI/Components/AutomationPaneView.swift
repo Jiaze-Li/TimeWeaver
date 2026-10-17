@@ -76,7 +76,7 @@ struct AutomationPaneView: View {
     private var automationIntervalField: some View {
         VStack(alignment: .leading, spacing: 6) {
             FieldLabel(title: "Interval (minutes)")
-            TextField("15", text: deferredBinding(model: model, \.autoSyncMinutes))
+            TextField(String(defaultAutoSyncMinutes), text: deferredBinding(model: model, \.autoSyncMinutes))
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 92, idealWidth: 110, maxWidth: 140, alignment: .leading)
                 .controlSize(.small)

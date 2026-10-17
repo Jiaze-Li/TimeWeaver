@@ -13,9 +13,35 @@ extension CalendarSyncEngine {
         schedulingTimeZoneIdentifier: String,
         eventOverrides: [String: EventOverride] = [:],
         cachedExtractions: [UUID: ExtractionResult] = [:],
-        authorizedDeletionSourceIDs: Set<UUID> = []
+        authorizedDeletionSourceIDs: Set<UUID> = [],
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
     ) async throws -> SyncRunResult {
         try await ensureAccess()
+
+        // Auto-review approval authorizes only the changes the user actually saw.
+        // Verify every proposed mutation before the first calendar write.
+        if !previewOnly, let expectedAutoReviewItems {
+            let verification = try await sync(
+                sources: sources,
+                workdayHours: workdayHours,
+                upcomingOnly: upcomingOnly,
+                previewOnly: true,
+                parserMode: parserMode,
+                aiConfiguration: aiConfiguration,
+                aiApprovals: aiApprovals,
+                schedulingTimeZoneIdentifier: schedulingTimeZoneIdentifier,
+                eventOverrides: eventOverrides,
+                cachedExtractions: cachedExtractions
+            )
+            guard verification.reports.count == sources.filter(\.enabled).count,
+                  !verification.reports.contains(where: { $0.errorMessage != nil || $0.reviewRequired }) else {
+                throw AppFailure.syncFailed("Cannot verify reviewed changes. No changes were applied; please review again.")
+            }
+            let actualItems = buildAutoReviewItems(from: verification.reports, existingState: stateStore.loadState())
+            guard actualItems == expectedAutoReviewItems else {
+                throw AppFailure.syncFailed("Calendar changes differ from your review. No changes were applied; please review again.")
+            }
+        }
         let schedulingTimeZone = TimeZone(identifier: schedulingTimeZoneIdentifier) ?? .current
         let referenceDate = Date()
         var state = stateStore.loadState()
