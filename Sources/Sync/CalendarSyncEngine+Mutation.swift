@@ -331,7 +331,7 @@ extension CalendarSyncEngine {
             stateStore.saveState(state)
         }
 
-        for key in deletedKeys {
+        for key in deletedKeys.sorted() {
             guard let stored = record.beforeSnapshot[key],
                   let start = parseFlexibleISO8601(stored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(stored.endISO, timeZone: timeZone),
