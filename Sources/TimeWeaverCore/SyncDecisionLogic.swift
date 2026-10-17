@@ -34,9 +34,42 @@ public enum TimeWeaverCore {
         return oldSignature == newSignature ? .unchanged : .update
     }
 
+    public static func matchesSourceIdentity(
+        trackedSourceID: String,
+        currentSourceID: String,
+        legacySourceID: String? = nil
+    ) -> Bool {
+        if trackedSourceID == currentSourceID {
+            return true
+        }
+        if let legacySourceID, !legacySourceID.isEmpty, trackedSourceID == legacySourceID {
+            return true
+        }
+        return false
+    }
+
+    public static func isDeletionSuspicious(
+        trackedCount: Int,
+        extractedCount: Int,
+        reviewRequired: Bool
+    ) -> Bool {
+        if reviewRequired && trackedCount > 0 {
+            return true
+        }
+        if trackedCount > 0 && extractedCount == 0 {
+            return true
+        }
+        return false
+    }
+
+    public static func validateTimeInterval(start: Date, end: Date) -> Bool {
+        start < end
+    }
+
     public static func shouldDeleteTrackedEvent(
         trackedSourceID: String,
         requestedSourceID: String,
+        legacySourceID: String? = nil,
         syncKey: String,
         activeSyncKeys: Set<String>,
         trackedStartISO: String,
@@ -44,7 +77,7 @@ public enum TimeWeaverCore {
         now: Date,
         timeZone: TimeZone
     ) -> Bool {
-        guard trackedSourceID == requestedSourceID else {
+        guard matchesSourceIdentity(trackedSourceID: trackedSourceID, currentSourceID: requestedSourceID, legacySourceID: legacySourceID) else {
             return false
         }
         guard !activeSyncKeys.contains(syncKey) else {

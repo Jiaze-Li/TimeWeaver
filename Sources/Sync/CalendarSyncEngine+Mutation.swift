@@ -1,5 +1,8 @@
 import Foundation
 import EventKit
+#if canImport(TimeWeaverCore)
+import TimeWeaverCore
+#endif
 
 extension CalendarSyncEngine {
     func syncSource(
@@ -9,7 +12,7 @@ extension CalendarSyncEngine {
         upcomingOnly: Bool,
         previewOnly: Bool,
         aiApprovals: [AIApprovalRecord],
-        titleOverrides: [Date: String] = [:]
+        eventOverrides: [String: EventOverride] = [:]
     ) throws -> SourceSyncReport {
         guard let calendar = store.calendars(for: .event).first(where: { $0.title == source.calendar }) else {
             throw AppFailure.calendarNotFound(source.calendar)
@@ -17,8 +20,9 @@ extension CalendarSyncEngine {
 
         if !previewOnly, extraction.reviewRequired {
             let sourceKey = sourceIdentity(for: source)
+            let legacyKey = legacySourceIdentity(for: source)
             let isApproved = aiApprovals.contains {
-                $0.sourceKey == sourceKey && $0.workbookFingerprint == extraction.workbookFingerprint
+                ($0.sourceKey == sourceKey || $0.sourceKey == legacyKey) && $0.workbookFingerprint == extraction.workbookFingerprint
             }
             if !isApproved {
                 throw AppFailure.syncFailed("AI parse needs review first. Run Preview, then click Approve AI before Sync.")
@@ -27,20 +31,68 @@ extension CalendarSyncEngine {
 
         var actions: [EventAction] = []
         let events = extraction.filteredEvents
-        let activeKeys = Set(events.map(\.syncKey))
+        var activeKeys = Set(events.map(\.syncKey))
+        let activeLegacyKeys = Set(events.compactMap(\.legacySyncKey))
+        activeKeys.formUnion(activeLegacyKeys)
 
         for event in events {
-            let customURL = primaryEventURL(for: event.syncKey)!
-            let existingRecord = state.events[event.syncKey]
-            let existingEvent = findExistingEvent(for: event, stateRecord: existingRecord, calendar: calendar, customURL: customURL)
-            let target = existingEvent ?? store.makeEvent()
-            let oldSignature = existingEvent.map(eventSignature) ?? ""
+            let override = eventOverrides[event.syncKey]
+            let resolvedTitle = override?.title ?? event.sourceName
+            let resolvedStart = override?.start ?? event.start
+            let resolvedEnd = override?.end ?? event.end
 
-            let resolvedTitle = titleOverrides[event.start] ?? event.sourceName
+            guard TimeWeaverCore.validateTimeInterval(start: resolvedStart, end: resolvedEnd) else {
+                throw AppFailure.invalidTime("Start time must be before end time for '\(resolvedTitle)'.")
+            }
+
+            let customURL = primaryEventURL(for: event.syncKey)!
+            var matchedKey = event.syncKey
+            var existingRecord = state.events[event.syncKey]
+            if existingRecord == nil, let legacyKey = event.legacySyncKey {
+                if let legacyRecord = state.events[legacyKey] {
+                    existingRecord = legacyRecord
+                    matchedKey = legacyKey
+                }
+            }
+            if existingRecord == nil {
+                let startISOStr = iso8601(resolvedStart)
+                let endISOStr = iso8601(resolvedEnd)
+                if let (timeMatchedKey, timeMatchedRecord) = state.events.first(where: { k, v in
+                    TimeWeaverCore.matchesSourceIdentity(
+                        trackedSourceID: v.sourceID,
+                        currentSourceID: sourceIdentity(for: source),
+                        legacySourceID: legacySourceIdentity(for: source)
+                    ) && v.startISO == startISOStr && v.endISO == endISOStr
+                }) {
+                    existingRecord = timeMatchedRecord
+                    matchedKey = timeMatchedKey
+                }
+            }
+            activeKeys.insert(matchedKey)
+
+            let existingEvent = findExistingEvent(for: event, stateRecord: existingRecord, calendar: calendar, customURL: customURL)
+            let oldSignature = existingEvent.map(eventSignature) ?? ""
+            let calendarChanged = existingEvent != nil && existingEvent?.calendar?.title != calendar.title
+
+            let target: EKEvent
+            var oldEventToDelete: EKEvent? = nil
+            if let existing = existingEvent {
+                if calendarChanged {
+                    // CalDAV accounts often disallow moving events across calendars directly.
+                    // Fall back to deleting the old event and creating a new one in the target calendar.
+                    oldEventToDelete = existing
+                    target = store.makeEvent()
+                } else {
+                    target = existing
+                }
+            } else {
+                target = store.makeEvent()
+            }
+
             target.calendar = calendar
             target.title = resolvedTitle
-            target.startDate = event.start
-            target.endDate = event.end
+            target.startDate = resolvedStart
+            target.endDate = resolvedEnd
             target.isAllDay = event.isAllDay
             target.notes = event.sourceLink
             target.url = customURL
@@ -48,13 +100,16 @@ extension CalendarSyncEngine {
             let newSignature = eventSignature(target)
             let status: String
             let mutation = TimeWeaverCore.determineUpsertMutation(
-                hasExistingEvent: existingEvent != nil,
+                hasExistingEvent: existingEvent != nil && !calendarChanged,
                 oldSignature: oldSignature,
                 newSignature: newSignature
             )
-            if mutation == .create {
+            if mutation == .create || calendarChanged {
                 status = previewOnly ? "would create" : "created"
                 if !previewOnly {
+                    if let oldToDel = oldEventToDelete {
+                        try? store.remove(oldToDel, span: .thisEvent, commit: true)
+                    }
                     try store.save(target, span: .thisEvent, commit: true)
                 }
             } else if mutation == .update {
@@ -66,15 +121,21 @@ extension CalendarSyncEngine {
                 status = "unchanged"
             }
 
-            actions.append(EventAction(status: status, title: resolvedTitle, start: event.start, end: event.end))
+            actions.append(EventAction(status: status, title: resolvedTitle, start: resolvedStart, end: resolvedEnd, syncKey: event.syncKey))
             if !previewOnly, let identifier = target.eventIdentifier {
+                if matchedKey != event.syncKey {
+                    state.events.removeValue(forKey: matchedKey)
+                }
+                if let legacyKey = event.legacySyncKey, legacyKey != event.syncKey {
+                    state.events.removeValue(forKey: legacyKey)
+                }
                 state.events[event.syncKey] = StoredEvent(
                     eventIdentifier: identifier,
                     sourceID: event.sourceID,
                     calendar: event.calendarName,
                     title: resolvedTitle,
-                    startISO: iso8601(event.start),
-                    endISO: iso8601(event.end)
+                    startISO: iso8601(resolvedStart),
+                    endISO: iso8601(resolvedEnd)
                 )
             }
         }
@@ -83,6 +144,7 @@ extension CalendarSyncEngine {
             guard TimeWeaverCore.shouldDeleteTrackedEvent(
                 trackedSourceID: value.sourceID,
                 requestedSourceID: sourceIdentity(for: source),
+                legacySourceID: legacySourceIdentity(for: source),
                 syncKey: key,
                 activeSyncKeys: activeKeys,
                 trackedStartISO: value.startISO,
@@ -99,6 +161,12 @@ extension CalendarSyncEngine {
             )
         }.sorted { $0.startISO < $1.startISO }
 
+        let isSuspicious = TimeWeaverCore.isDeletionSuspicious(
+            trackedCount: staleEntries.count,
+            extractedCount: events.count,
+            reviewRequired: extraction.reviewRequired
+        )
+
         var deleteCandidates: [DeleteCandidate] = []
         for candidate in staleEntries {
             if !previewOnly {
@@ -114,11 +182,17 @@ extension CalendarSyncEngine {
                         status: previewOnly ? "would delete" : "deleted",
                         title: candidate.title,
                         start: start,
-                        end: end
+                        end: end,
+                        syncKey: candidate.syncKey
                     )
                 )
             }
             deleteCandidates.append(candidate)
+        }
+
+        var parserNotes = extraction.parserNotes
+        if isSuspicious {
+            parserNotes.append("Potential parsing issue: 0 bookings matched, but \(staleEntries.count) events were previously synced.")
         }
 
         return SourceSyncReport(
@@ -127,7 +201,7 @@ extension CalendarSyncEngine {
             bookingID: source.bookingID,
             calendarName: source.calendar,
             parserLabel: extraction.parserLabel,
-            parserNotes: extraction.parserNotes,
+            parserNotes: parserNotes,
             reviewRequired: extraction.reviewRequired,
             workbookFingerprint: extraction.workbookFingerprint,
             averageConfidence: extraction.averageConfidence,
@@ -137,6 +211,7 @@ extension CalendarSyncEngine {
             filteredPastCount: extraction.filteredPastCount,
             actions: actions,
             deleteCandidates: deleteCandidates,
+            isSuspiciousDeletion: isSuspicious,
             errorMessage: nil
         )
     }

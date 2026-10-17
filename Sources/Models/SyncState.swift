@@ -11,4 +11,8 @@ struct StoredEvent: Codable {
 
 struct SyncState: Codable {
     var events: [String: StoredEvent]
+
+    init(events: [String: StoredEvent] = [:]) {
+        self.events = events
+    }
 }

@@ -10,8 +10,12 @@ extension CalendarSyncEngine {
 
         let start = Calendar.current.date(byAdding: .day, value: -2, to: event.start) ?? event.start
         let end = Calendar.current.date(byAdding: .day, value: 2, to: event.end) ?? event.end
-        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: [calendar])
-        let candidateURLs = Set(eventURLs(for: event.syncKey))
+        let searchCalendars = store.calendars(for: .event)
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: searchCalendars.isEmpty ? [calendar] : searchCalendars)
+        var candidateURLs = Set(eventURLs(for: event.syncKey))
+        if let legacySyncKey = event.legacySyncKey {
+            candidateURLs.formUnion(eventURLs(for: legacySyncKey))
+        }
         return store.events(matching: predicate).first(where: { event in
             event.url == customURL || event.url.map { candidateURLs.contains($0) } == true
         })
@@ -26,10 +30,11 @@ extension CalendarSyncEngine {
               let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current) else {
             return nil
         }
+        let searchCalendars = store.calendars(for: .event)
         let predicate = store.predicateForEvents(
             withStart: Calendar.current.date(byAdding: .day, value: -2, to: start) ?? start,
             end: Calendar.current.date(byAdding: .day, value: 2, to: end) ?? end,
-            calendars: [calendar]
+            calendars: searchCalendars.isEmpty ? [calendar] : searchCalendars
         )
         let expectedURLs = Set(eventURLs(for: candidate.syncKey))
         return store.events(matching: predicate).first(where: { event in

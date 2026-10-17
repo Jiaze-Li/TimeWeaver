@@ -1,6 +1,9 @@
 import Foundation
 import CryptoKit
 import EventKit
+#if canImport(TimeWeaverCore)
+import TimeWeaverCore
+#endif
 
 func eventSignature(_ event: EKEvent) -> String {
     "\(event.title ?? "")|\(event.startDate.timeIntervalSince1970)|\(event.endDate.timeIntervalSince1970)|\(event.isAllDay)|\(event.notes ?? "")|\(event.url?.absoluteString ?? "")|\(event.calendar?.title ?? "")"

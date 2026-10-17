@@ -43,7 +43,15 @@ TimeWeaver is no longer positioned as a PPMS-only utility. The product goal is:
   - Custom
 - Local timetable image parser for structured schedule images, so some image imports do not require any API key
 
-## Build
+## Build & Test
+
+### Run Unit and Integration Tests
+
+```bash
+swift test
+```
+
+### Build Native App
 
 From the project directory:
 
@@ -57,6 +65,8 @@ This builds:
 ```text
 ./build/TimeWeaver.app
 ```
+
+For architecture details, synchronization workflow, and system constraints, see [ARCHITECTURE.md](file:///Users/jack/Downloads/scripts/TimeWeaver/ARCHITECTURE.md).
 
 ## Build a DMG
 
@@ -142,4 +152,5 @@ This is intentional so existing users do not lose settings during the rename to 
 - `Info.plist` — bundle metadata
 - `build_native_app.sh` — app bundle build script
 - `create_dmg.sh` — DMG packaging script
-- `DEVELOPMENT_LOG.md` — full project history, preferences, and handoff log
+- `ARCHITECTURE.md` — system architecture, synchronization data flow, and key constraints
+- `DEVELOPMENT_LOG.md` — archived historical development log

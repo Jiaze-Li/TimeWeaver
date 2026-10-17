@@ -21,11 +21,7 @@ extension AppModel {
             ui.status = "Auto sync is waiting for manual confirmation"
             return
         }
-        if ui.confirmBeforeDeletion {
-            previewForAutomatedDeletionSafety()
-            return
-        }
-        runSync(previewOnly: false)
+        previewForAutomatedDeletionSafety()
     }
 
     func prepareSyncConfirmation() {
@@ -51,25 +47,46 @@ extension AppModel {
                 ui.pendingAIReviews = pendingReviews(from: result.reports)
                 applySourceStatuses(from: result.reports)
 
+                let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
                 let hasErrors = result.reports.contains { $0.errorMessage != nil }
                 if hasErrors {
+                    ui.pendingSyncPlan = nil
                     ui.status = "Fix source errors before syncing"
                 } else if !ui.pendingAIReviews.isEmpty {
+                    ui.pendingSyncPlan = nil
                     ui.status = "Approve AI layouts before syncing"
                 } else if let confirmation = buildSyncConfirmation(from: result.reports) {
+                    ui.pendingSyncPlan = SyncPlan(
+                        reports: result.reports,
+                        extractions: result.extractions,
+                        outputText: result.outputText,
+                        sources: enabledSources,
+                        upcomingOnly: ui.upcomingOnly,
+                        workdayHours: workdayHours
+                    )
                     ui.pendingSyncConfirmation = confirmation
                     ui.status = "Review sync changes"
                 } else if hasNonDeleteChanges(in: result.reports) {
+                    ui.pendingSyncPlan = SyncPlan(
+                        reports: result.reports,
+                        extractions: result.extractions,
+                        outputText: result.outputText,
+                        sources: enabledSources,
+                        upcomingOnly: ui.upcomingOnly,
+                        workdayHours: workdayHours
+                    )
                     ui.status = "Applying sync changes..."
                     ui.isBusy = false
                     runSync(previewOnly: false)
                     return
                 } else {
+                    ui.pendingSyncPlan = nil
                     ui.status = "No changes to sync\nSync at \(syncTimestampString(syncStartedAt))"
                 }
             } catch {
                 ui.output = error.localizedDescription
                 ui.pendingAIReviews = []
+                ui.pendingSyncPlan = nil
                 clearLoadingStatuses()
                 ui.status = error.localizedDescription
             }
@@ -88,9 +105,11 @@ extension AppModel {
             count + report.actions.filter { $0.status == "would delete" }.count
         }
 
-        let shouldPrompt = ui.confirmBeforeSync
-            ? (createCount + updateCount + deleteCount > 0)
-            : (ui.confirmBeforeDeletion && deleteCount > 0)
+        let suspiciousReports = reports.filter(\.isSuspiciousDeletion)
+        let hasSuspiciousDeletion = !suspiciousReports.isEmpty
+
+        let shouldPrompt = hasSuspiciousDeletion
+            || (ui.confirmBeforeSync ? (createCount + updateCount + deleteCount > 0) : (ui.confirmBeforeDeletion && deleteCount > 0))
         guard shouldPrompt else {
             return nil
         }
@@ -103,6 +122,13 @@ extension AppModel {
         }
 
         var lines: [String] = []
+        if hasSuspiciousDeletion {
+            let names = suspiciousReports.map(\.sourceName).joined(separator: ", ")
+            lines.append("⚠️ UNUSUAL DELETION WARNING:")
+            lines.append("Source '\(names)' matched 0 bookings, but events are currently scheduled in your calendar.")
+            lines.append("Please verify that appointments were intentionally removed from the source.")
+            lines.append("")
+        }
         lines.append("This sync will apply these calendar changes:")
         lines.append("Add: \(createCount)")
         lines.append("Update: \(updateCount)")
@@ -147,6 +173,7 @@ extension AppModel {
                 ui.pendingAIReviews = pendingReviews(from: result.reports)
                 applySourceStatuses(from: result.reports)
 
+                let hasSuspiciousDeletion = result.reports.contains { $0.isSuspiciousDeletion }
                 let deleteCount = result.reports.reduce(0) { count, report in
                     count + report.actions.filter { $0.status == "would delete" }.count
                 }
@@ -155,9 +182,20 @@ extension AppModel {
                     ui.status = "Auto sync found source errors"
                 } else if !ui.pendingAIReviews.isEmpty {
                     ui.status = "Auto sync is waiting for AI approval"
+                } else if hasSuspiciousDeletion {
+                    ui.status = "Auto sync paused: 0 bookings parsed with scheduled events present"
                 } else if deleteCount > 0 {
                     ui.status = "Auto sync found removed events waiting for manual confirmation"
                 } else if hasNonDeleteChanges(in: result.reports) {
+                    let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
+                    ui.pendingSyncPlan = SyncPlan(
+                        reports: result.reports,
+                        extractions: result.extractions,
+                        outputText: result.outputText,
+                        sources: enabledSources,
+                        upcomingOnly: ui.upcomingOnly,
+                        workdayHours: workdayHours
+                    )
                     ui.isBusy = false
                     runSync(previewOnly: false)
                     return

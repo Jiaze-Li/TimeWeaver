@@ -15,6 +15,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Run unit & integration tests
+        run: swift test
+
       - name: Build app bundle
         run: |
           chmod +x ./build_native_app.sh

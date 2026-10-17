@@ -30,8 +30,6 @@ let package = Package(
             dependencies: ["TimeWeaverCore"],
             path: "Sources",
             exclude: [
-                "Parsers",
-                "Sync",
                 "TimeWeaverCore",
                 "UI/AppModel.swift",
                 "UI/AppModel+Automation.swift",
@@ -54,7 +52,27 @@ let package = Package(
                 "Models/SyncState.swift",
                 "Storage/Stores.swift",
                 "Storage/SettingsCoordinator.swift",
-                "UI/UIState.swift"
+                "UI/UIState.swift",
+                "Sync/CalendarStoreProtocol.swift",
+                "Sync/SyncStateStoreProtocol.swift",
+                "Sync/ParserProtocols.swift",
+                "Sync/SyncUtilities.swift",
+                "Sync/CalendarSyncEngine.swift",
+                "Sync/CalendarSyncEngine+EventLookup.swift",
+                "Sync/CalendarSyncEngine+Mutation.swift",
+                "Sync/CalendarSyncEngine+Orchestration.swift",
+                "Sync/ReservationExtractor.swift",
+                "Parsers/SourceIOUtilities.swift",
+                "Parsers/DateTimeParsingUtilities.swift",
+                "Parsers/XLSXPackage.swift",
+                "Parsers/WorksheetParser.swift",
+                "Parsers/XMLWorkbookParsers.swift",
+                "Parsers/LocalImageParser.swift",
+                "Parsers/AIWorkbookNormalizer.swift",
+                "Parsers/AIWorkbookNormalizer+Snapshot.swift",
+                "Parsers/AIWorkbookNormalizer+Resolution.swift",
+                "Parsers/AIWorkbookNormalizer+ImageFlow.swift",
+                "Parsers/AIWorkbookNormalizer+Transport.swift"
             ]
         ),
         .testTarget(

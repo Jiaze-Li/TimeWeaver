@@ -16,9 +16,22 @@ struct SlotOccurrence {
     var isAllDay: Bool
 }
 
+struct EventOverride: Equatable, Codable {
+    var title: String?
+    var start: Date?
+    var end: Date?
+
+    init(title: String? = nil, start: Date? = nil, end: Date? = nil) {
+        self.title = title
+        self.start = start
+        self.end = end
+    }
+}
+
 struct ReservationEvent: Identifiable {
     var id: String { syncKey }
     var syncKey: String
+    var legacySyncKey: String?
     var sourceID: String
     var sourceName: String
     var sourceLink: String
@@ -29,6 +42,34 @@ struct ReservationEvent: Identifiable {
     var isAllDay: Bool
     var sheetNames: [String]
     var cellReferences: [String]
+
+    init(
+        syncKey: String,
+        legacySyncKey: String? = nil,
+        sourceID: String,
+        sourceName: String,
+        sourceLink: String,
+        bookingID: String,
+        calendarName: String,
+        start: Date,
+        end: Date,
+        isAllDay: Bool,
+        sheetNames: [String],
+        cellReferences: [String]
+    ) {
+        self.syncKey = syncKey
+        self.legacySyncKey = legacySyncKey
+        self.sourceID = sourceID
+        self.sourceName = sourceName
+        self.sourceLink = sourceLink
+        self.bookingID = bookingID
+        self.calendarName = calendarName
+        self.start = start
+        self.end = end
+        self.isAllDay = isAllDay
+        self.sheetNames = sheetNames
+        self.cellReferences = cellReferences
+    }
 }
 
 struct EventAction {
@@ -36,6 +77,15 @@ struct EventAction {
     var title: String
     var start: Date
     var end: Date
+    var syncKey: String
+
+    init(status: String, title: String, start: Date, end: Date, syncKey: String = "") {
+        self.status = status
+        self.title = title
+        self.start = start
+        self.end = end
+        self.syncKey = syncKey
+    }
 }
 
 struct DeleteCandidate {
@@ -68,15 +118,54 @@ struct ImageImportPlan {
     var workbookFingerprint: String?
     var previewOutput: String
     var sampleIntervals: [String]
+    var extraction: ExtractionResult? = nil
 }
 
 struct ImageImportEventEntry: Identifiable {
-    let id = UUID()
+    var id: String { syncKey }
+    var syncKey: String
     var title: String
     let originalTitle: String
     var start: Date
+    let originalStart: Date
     var end: Date
+    let originalEnd: Date
     let status: String
+
+    init(
+        syncKey: String,
+        title: String,
+        originalTitle: String,
+        start: Date,
+        originalStart: Date? = nil,
+        end: Date,
+        originalEnd: Date? = nil,
+        status: String
+    ) {
+        self.syncKey = syncKey
+        self.title = title
+        self.originalTitle = originalTitle
+        self.start = start
+        self.originalStart = originalStart ?? start
+        self.end = end
+        self.originalEnd = originalEnd ?? end
+        self.status = status
+    }
+}
+
+struct SyncPlan {
+    var id: UUID = UUID()
+    var reports: [SourceSyncReport]
+    var extractions: [UUID: ExtractionResult]
+    var outputText: String
+    var sources: [SourceItem] = []
+    var upcomingOnly: Bool = false
+    var workdayHours: String = ""
+    var createdAt: Date = Date()
+
+    func isValid(for currentSources: [SourceItem], upcomingOnly currentUpcoming: Bool, workdayHours currentWorkday: String) -> Bool {
+        return sources == currentSources && upcomingOnly == currentUpcoming && workdayHours == currentWorkday
+    }
 }
 
 struct ImageImportReview: Identifiable {
@@ -102,12 +191,14 @@ struct SourceSyncReport: Identifiable {
     var filteredPastCount: Int
     var actions: [EventAction]
     var deleteCandidates: [DeleteCandidate]
+    var isSuspiciousDeletion: Bool = false
     var errorMessage: String?
 }
 
 struct SyncRunResult {
     var reports: [SourceSyncReport]
     var outputText: String
+    var extractions: [UUID: ExtractionResult] = [:]
 }
 
 struct ExtractionResult {
