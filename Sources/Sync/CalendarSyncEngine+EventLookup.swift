@@ -54,4 +54,14 @@ extension CalendarSyncEngine {
             event.url.map { expectedURLs.contains($0) } == true
         })
     }
+
+    func findMatchingEventsForUndo(syncKey: String, start: Date, end: Date, calendar: EKCalendar) -> [EKEvent] {
+        let searchStart = Calendar.current.date(byAdding: .day, value: -2, to: start) ?? start
+        let searchEnd = Calendar.current.date(byAdding: .day, value: 2, to: end) ?? end
+        let predicate = store.predicateForEvents(withStart: searchStart, end: searchEnd, calendars: [calendar])
+        let expectedURLs = Set(eventURLs(for: syncKey))
+        return store.events(matching: predicate).filter { event in
+            event.url.map { expectedURLs.contains($0) } == true
+        }
+    }
 }

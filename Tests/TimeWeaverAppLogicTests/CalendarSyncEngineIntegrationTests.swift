@@ -1223,4 +1223,107 @@ final class CalendarSyncEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(fakeStore.storedEvents.count, 1, "Suspicious deletion blocked from removing remaining event")
         XCTAssertEqual(suspReport.actions.first?.status, "deletion rejected: suspicious")
     }
+
+    // 15. Undo Partial Restore Failure Then Retry Is Idempotent
+    func testUndoPartialRestoreFailureThenRetryIsIdempotent() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Partial Undo Test",
+            source: "/path/to/img.png",
+            bookingID: "TEST",
+            calendar: "Default"
+        )
+
+        let startA = makeDate(hour: 9)
+        let endA = makeDate(hour: 10)
+        let startB = makeDate(hour: 11)
+        let endB = makeDate(hour: 12)
+        let syncKeyA = "undo-partial-A"
+        let syncKeyB = "undo-partial-B"
+
+        let storedA = StoredEvent(
+            eventIdentifier: "HISTORIC-A",
+            sourceID: source.stableIdentity,
+            calendar: "Default",
+            title: "Historic Event A",
+            startISO: iso8601(startA),
+            endISO: iso8601(endA)
+        )
+        let storedB = StoredEvent(
+            eventIdentifier: "HISTORIC-B",
+            sourceID: source.stableIdentity,
+            calendar: "Default",
+            title: "Historic Event B",
+            startISO: iso8601(startB),
+            endISO: iso8601(endB)
+        )
+
+        // Snapshot before import had A and B; snapshot after import had neither (simulating both deleted)
+        let beforeSnapshot: [String: StoredEvent] = [
+            syncKeyA: storedA,
+            syncKeyB: storedB
+        ]
+        let afterSnapshot: [String: StoredEvent] = [:]
+
+        let undoRecord = ImageImportUndoRecord(
+            sourceIdentityKey: source.stableIdentity,
+            calendarName: "Default",
+            beforeSnapshot: beforeSnapshot,
+            afterSnapshot: afterSnapshot
+        )
+
+        // Inject save failure specifically for Event B
+        fakeStore.saveFailureTitle = "Historic Event B"
+
+        // Step 1: Run Undo. A should restore, B should fail
+        do {
+            _ = try await engine.revertImageImport(
+                record: undoRecord,
+                schedulingTimeZoneIdentifier: "Asia/Shanghai"
+            )
+            XCTFail("Should fail because Event B save fails")
+        } catch {
+            // Expected failure on Event B
+        }
+
+        // Verify partial state: Event A is created in calendar and in SyncState, Event B is not yet created
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Calendar should have Event A restored")
+        let eventA = fakeStore.storedEvents.values.first
+        XCTAssertEqual(eventA?.title, "Historic Event A")
+        let intermediateState = stateStore.loadState()
+        XCTAssertEqual(intermediateState.events.count, 1, "SyncState should record Event A")
+        XCTAssertEqual(intermediateState.events[syncKeyA]?.eventIdentifier, eventA?.eventIdentifier)
+
+        // Step 2: Remove the failure condition and retry the EXACT SAME undo operation
+        fakeStore.saveFailureTitle = nil
+
+        let summary = try await engine.revertImageImport(
+            record: undoRecord,
+            schedulingTimeZoneIdentifier: "Asia/Shanghai"
+        )
+        XCTAssertTrue(summary.contains("Restored"))
+
+        // Step 3: Verify idempotency: Exactly 2 events in calendar (A and B), no duplicates
+        XCTAssertEqual(fakeStore.storedEvents.count, 2, "Calendar should contain exactly 2 events without duplicates")
+        let titles = Set(fakeStore.storedEvents.values.map(\.title))
+        XCTAssertTrue(titles.contains("Historic Event A"), "Should contain Historic Event A")
+        XCTAssertTrue(titles.contains("Historic Event B"), "Should contain Historic Event B")
+
+        // Step 4: Verify final SyncState matches actual calendar events
+        let finalState = stateStore.loadState()
+        XCTAssertEqual(finalState.events.count, 2, "SyncState should contain both events")
+        for (key, stored) in finalState.events {
+            let actualEvent = fakeStore.storedEvents[stored.eventIdentifier]
+            XCTAssertNotNil(actualEvent, "Stored event identifier in SyncState must match an actual calendar event")
+            XCTAssertEqual(actualEvent?.title, stored.title)
+            let expectedURL = primaryEventURL(for: key)
+            XCTAssertEqual(actualEvent?.url, expectedURL, "Actual event URL must match key URL")
+        }
+    }
 }

@@ -10,6 +10,7 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     var shouldFailSave: Bool = false
     var shouldFailRemove: Bool = false
     var removeFailureIdentifier: String? = nil
+    var saveFailureTitle: String? = nil
     private let eventStore = EKEventStore()
     private static var associatedKey: UInt8 = 0
     private static let fakeSubclass: AnyClass? = {
@@ -74,7 +75,7 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     }
 
     func save(_ event: EKEvent, span: EKSpan, commit: Bool) throws {
-        if shouldFailSave {
+        if shouldFailSave || (saveFailureTitle != nil && event.title == saveFailureTitle) {
             throw AppFailure.syncFailed("Injected save failure")
         }
         if event.eventIdentifier == nil || event.eventIdentifier.isEmpty {

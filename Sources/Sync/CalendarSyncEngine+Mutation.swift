@@ -328,6 +328,7 @@ extension CalendarSyncEngine {
                 removedCount += 1
             }
             state.events.removeValue(forKey: key)
+            stateStore.saveState(state)
         }
 
         for key in deletedKeys {
@@ -335,24 +336,53 @@ extension CalendarSyncEngine {
                   let start = parseFlexibleISO8601(stored.startISO, timeZone: timeZone),
                   let end = parseFlexibleISO8601(stored.endISO, timeZone: timeZone),
                   let customURL = primaryEventURL(for: key) else { continue }
-            let event = store.makeEvent()
-            event.calendar = calendar
-            event.title = stored.title
-            event.startDate = start
-            event.endDate = end
-            event.url = customURL
-            try store.save(event, span: .thisEvent, commit: true)
-            if let identifier = event.eventIdentifier {
-                state.events[key] = StoredEvent(
-                    eventIdentifier: identifier,
-                    sourceID: stored.sourceID,
-                    calendar: stored.calendar,
-                    title: stored.title,
-                    startISO: stored.startISO,
-                    endISO: stored.endISO
-                )
+
+            let matches = findMatchingEventsForUndo(syncKey: key, start: start, end: end, calendar: calendar)
+            if matches.count > 1 {
+                throw AppFailure.syncFailed("Cannot safely undo event '\(stored.title)': found \(matches.count) matching calendar events with key '\(key)'.")
             }
-            restoredCount += 1
+
+            if let existing = matches.first {
+                // Event is already present in calendar (e.g. from previous partial undo attempt); reuse in-place
+                existing.title = stored.title
+                existing.startDate = start
+                existing.endDate = end
+                existing.url = customURL
+                try store.save(existing, span: .thisEvent, commit: true)
+                if let identifier = existing.eventIdentifier {
+                    state.events[key] = StoredEvent(
+                        eventIdentifier: identifier,
+                        sourceID: stored.sourceID,
+                        calendar: stored.calendar,
+                        title: stored.title,
+                        startISO: stored.startISO,
+                        endISO: stored.endISO
+                    )
+                    stateStore.saveState(state)
+                }
+                restoredCount += 1
+            } else {
+                // Not restored yet; create new event
+                let event = store.makeEvent()
+                event.calendar = calendar
+                event.title = stored.title
+                event.startDate = start
+                event.endDate = end
+                event.url = customURL
+                try store.save(event, span: .thisEvent, commit: true)
+                if let identifier = event.eventIdentifier {
+                    state.events[key] = StoredEvent(
+                        eventIdentifier: identifier,
+                        sourceID: stored.sourceID,
+                        calendar: stored.calendar,
+                        title: stored.title,
+                        startISO: stored.startISO,
+                        endISO: stored.endISO
+                    )
+                    stateStore.saveState(state)
+                }
+                restoredCount += 1
+            }
         }
 
         for key in updatedKeys {
@@ -380,27 +410,53 @@ extension CalendarSyncEngine {
                     startISO: oldStored.startISO,
                     endISO: oldStored.endISO
                 )
+                stateStore.saveState(state)
                 restoredCount += 1
             } else {
-                // Event was not found; recreate it
-                let event = store.makeEvent()
-                event.calendar = calendar
-                event.title = oldStored.title
-                event.startDate = oldStart
-                event.endDate = oldEnd
-                event.url = customURL
-                try store.save(event, span: .thisEvent, commit: true)
-                if let identifier = event.eventIdentifier {
-                    state.events[key] = StoredEvent(
-                        eventIdentifier: identifier,
-                        sourceID: oldStored.sourceID,
-                        calendar: oldStored.calendar,
-                        title: oldStored.title,
-                        startISO: oldStored.startISO,
-                        endISO: oldStored.endISO
-                    )
+                let matches = findMatchingEventsForUndo(syncKey: key, start: oldStart, end: oldEnd, calendar: calendar)
+                if matches.count > 1 {
+                    throw AppFailure.syncFailed("Cannot safely undo updated event '\(oldStored.title)': found \(matches.count) matching calendar events with key '\(key)'.")
                 }
-                restoredCount += 1
+                if let existing = matches.first {
+                    existing.title = oldStored.title
+                    existing.startDate = oldStart
+                    existing.endDate = oldEnd
+                    existing.url = customURL
+                    try store.save(existing, span: .thisEvent, commit: true)
+                    if let identifier = existing.eventIdentifier {
+                        state.events[key] = StoredEvent(
+                            eventIdentifier: identifier,
+                            sourceID: oldStored.sourceID,
+                            calendar: oldStored.calendar,
+                            title: oldStored.title,
+                            startISO: oldStored.startISO,
+                            endISO: oldStored.endISO
+                        )
+                        stateStore.saveState(state)
+                    }
+                    restoredCount += 1
+                } else {
+                    // Event was not found; recreate it
+                    let event = store.makeEvent()
+                    event.calendar = calendar
+                    event.title = oldStored.title
+                    event.startDate = oldStart
+                    event.endDate = oldEnd
+                    event.url = customURL
+                    try store.save(event, span: .thisEvent, commit: true)
+                    if let identifier = event.eventIdentifier {
+                        state.events[key] = StoredEvent(
+                            eventIdentifier: identifier,
+                            sourceID: oldStored.sourceID,
+                            calendar: oldStored.calendar,
+                            title: oldStored.title,
+                            startISO: oldStored.startISO,
+                            endISO: oldStored.endISO
+                        )
+                        stateStore.saveState(state)
+                    }
+                    restoredCount += 1
+                }
             }
         }
 
