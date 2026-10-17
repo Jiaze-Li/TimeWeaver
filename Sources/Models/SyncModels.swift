@@ -241,6 +241,8 @@ struct ExtractionResult {
     var workbookFingerprint: String?
     var averageConfidence: Double?
     var minimumConfidence: Double?
+    // Diagnostics only; never drives synchronization decisions.
+    var performanceTimings: [String: TimeInterval] = [:]
 }
 
 enum SourceRuntimeStatus: Equatable {

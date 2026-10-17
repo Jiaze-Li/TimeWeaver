@@ -491,4 +491,24 @@ final class AutoCheckAndReviewTests: XCTestCase {
             forceFingerprint: fingerprint))
         XCTAssertFalse(shouldSuppressIgnoredReview(fingerprint: "new-proposal", records: [record]))
     }
+
+    func testCachedExtractionStillReportsCalendarComparisonTiming() async throws {
+        let fixture = makeAutoReviewSyncFixture()
+        let preview = try await fixture.engine.sync(
+            sources: [fixture.source],
+            workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false,
+            previewOnly: true,
+            parserMode: .rulesOnly,
+            aiConfiguration: nil,
+            aiApprovals: [],
+            schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: [fixture.source.id: fixture.extraction]
+        )
+        XCTAssertTrue(preview.outputText.contains("extraction"))
+        XCTAssertTrue(preview.outputText.contains("(cached)"))
+        XCTAssertTrue(preview.outputText.contains("calendar compare/write"))
+        XCTAssertTrue(preview.outputText.contains("Timing overall:"))
+        XCTAssertFalse(preview.outputText.contains("Stages:"))
+    }
 }
