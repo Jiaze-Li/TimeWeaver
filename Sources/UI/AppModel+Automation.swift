@@ -149,12 +149,12 @@ extension AppModel {
     }
 
     func triggerAutomatedSync() {
-        if ui.isBusy { return }
+        if ui.isBusy || ui.pendingAutoReview != nil { return }
         checkAndReviewCalendarChanges()
     }
 
     func checkAndReviewCalendarChanges() {
-        if ui.isBusy { return }
+        if ui.isBusy || ui.pendingAutoReview != nil { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
             ui.status = "Enable at least one source first"
@@ -196,11 +196,12 @@ extension AppModel {
                 }
 
                 let fingerprint = computeChangeFingerprint(for: items)
-                if fingerprint == dismissedChangeFingerprint {
+                if fingerprint == dismissedChangeFingerprint || fingerprint == ui.pendingAutoReview?.fingerprint {
                     ui.status = "Auto sync checked: proposed changes already reviewed and dismissed"
                     ui.isBusy = false
                     return
                 }
+
 
                 let suspiciousReports = result.reports.filter(\.isSuspiciousDeletion)
                 let authorizedIDs = Set(suspiciousReports.map(\.sourceItemID))
@@ -296,12 +297,14 @@ extension AppModel {
     }
 
     func acceptAutoReview() {
+        if ui.isBusy { return }
         guard let review = ui.pendingAutoReview else { return }
         closeAutoReviewWindow()
         dismissedChangeFingerprint = nil
         ui.pendingSyncPlan = review.plan
         runSync(previewOnly: false, authorizedDeletionSourceIDs: review.authorizedDeletionSourceIDs)
     }
+
 
     func ignoreAutoReview() {
         guard let review = ui.pendingAutoReview else { return }

@@ -55,16 +55,20 @@ struct AutoReviewWindowView: View {
             }
             Spacer(minLength: 0)
             Button("Ignore") {
+
                 model.ignoreAutoReview()
             }
             .keyboardShortcut(.cancelAction)
+            .disabled(model.ui.isBusy)
 
             Button("Accept All") {
                 model.acceptAutoReview()
             }
             .buttonStyle(.borderedProminent)
             .keyboardShortcut(.defaultAction)
+            .disabled(model.ui.isBusy)
         }
+
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
