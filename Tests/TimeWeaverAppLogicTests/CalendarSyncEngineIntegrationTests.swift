@@ -700,21 +700,33 @@ final class CalendarSyncEngineIntegrationTests: XCTestCase {
 
         let start = makeDate(hour: 9)
         let end = makeDate(hour: 10)
-        let customURL = URL(string: "timeweaver://event?key=\(legacySyncKey)")!
+        // Authentic legacy URL format used by PPMSCalendarSync
+        let legacyURL = URL(string: "ppms-sync://event/\(legacySyncKey)")!
 
-        // Seed old event in FakeCalendarStore and old SyncState using legacySourceID and legacySyncKey
+        // Seed old event in FakeCalendarStore with the legacy URL
         let existingEvent = fakeStore.makeEvent()
         existingEvent.calendar = fakeStore.calendars(for: .event).first
         existingEvent.title = "Historic Meeting"
         existingEvent.startDate = start
         existingEvent.endDate = end
-        existingEvent.url = customURL
+        existingEvent.url = legacyURL
         try fakeStore.save(existingEvent, span: .thisEvent, commit: true)
-        let eventID = existingEvent.eventIdentifier!
+        let realEKID = existingEvent.eventIdentifier!
 
+        // Seed an unrelated event with a different URL at the exact same time
+        let otherSyncKey = "other-unrelated-sync-key"
+        let otherEvent = fakeStore.makeEvent()
+        otherEvent.calendar = fakeStore.calendars(for: .event).first
+        otherEvent.title = "Unrelated Meeting"
+        otherEvent.startDate = start
+        otherEvent.endDate = end
+        otherEvent.url = URL(string: "ppms-sync://event/\(otherSyncKey)")!
+        try fakeStore.save(otherEvent, span: .thisEvent, commit: true)
+
+        // Seed state with an expired/stale eventIdentifier to force fallback to predicate + legacy URL matching
         var state = SyncState()
         state.events[legacySyncKey] = StoredEvent(
-            eventIdentifier: eventID,
+            eventIdentifier: "STALE-EXPIRED-IDENTIFIER-NOT-IN-STORE",
             sourceID: legacySourceID,
             calendar: oldCalendar,
             title: "Historic Meeting",
@@ -757,12 +769,13 @@ final class CalendarSyncEngineIntegrationTests: XCTestCase {
             aiApprovals: []
         )
 
-        // Verify: The event was matched via legacySyncKey, updated/unchanged without duplication, and migrated in state
-        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Must not duplicate historical event")
-        XCTAssertEqual(state.events.count, 1, "Must have exactly 1 event in state")
+        // Verify: The event was matched via legacy ppms-sync URL fallback despite stale identifier
+        // Unrelated event must NOT be erroneously claimed
+        XCTAssertEqual(fakeStore.storedEvents.count, 2, "Must not duplicate historical event, and other event must remain")
+        XCTAssertEqual(state.events.count, 1, "Must have exactly 1 event in state for this source")
         XCTAssertNil(state.events[legacySyncKey], "Legacy sync key must be migrated away")
         XCTAssertNotNil(state.events[newSyncKey], "New stable sync key must be stored")
-        XCTAssertEqual(state.events[newSyncKey]?.eventIdentifier, eventID)
+        XCTAssertEqual(state.events[newSyncKey]?.eventIdentifier, realEKID, "Matched event should be the historic event via URL, not the unrelated event")
         XCTAssertEqual(state.events[newSyncKey]?.sourceID, sourceItem.stableIdentity)
     }
 
@@ -922,5 +935,292 @@ final class CalendarSyncEngineIntegrationTests: XCTestCase {
         XCTAssertEqual(storedInFake?.startDate, originalStart, "Preview must not mutate existing EKEvent start date")
         XCTAssertEqual(storedInFake?.endDate, originalEnd, "Preview must not mutate existing EKEvent end date")
         XCTAssertEqual(storedInFake?.notes, "Original Notes", "Preview must not mutate existing EKEvent notes")
+    }
+
+    // 12. P2-3: Cross-calendar migration double failure (remove old fails AND rollback fails) throws explicit error
+    func testCrossCalendarMigrationDoubleFailureThrowsExplicitError() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "OldCal")
+        _ = fakeStore.addCalendar(title: "NewCal")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let sourceID = UUID()
+        let sourceOld = SourceItem(
+            id: sourceID,
+            enabled: true,
+            name: "Double Failure Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "BK-1",
+            calendar: "OldCal"
+        )
+
+        let start = makeDate(hour: 10)
+        let end = makeDate(hour: 11)
+        let eventOld = ReservationEvent(
+            syncKey: "double-fail-key",
+            legacySyncKey: nil,
+            sourceID: sourceOld.id.uuidString,
+            sourceName: "Meeting",
+            sourceLink: "",
+            bookingID: "BK-1",
+            calendarName: "OldCal",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        var state = SyncState()
+        _ = try await engine.syncSource(
+            source: sourceOld,
+            extraction: ExtractionResult(allEvents: [eventOld], filteredEvents: [eventOld], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+        XCTAssertEqual(fakeStore.storedEvents.count, 1)
+
+        let sourceNew = SourceItem(
+            id: sourceID,
+            enabled: true,
+            name: "Double Failure Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "BK-1",
+            calendar: "NewCal"
+        )
+        let eventNew = ReservationEvent(
+            syncKey: "double-fail-key",
+            legacySyncKey: nil,
+            sourceID: sourceNew.id.uuidString,
+            sourceName: "Meeting",
+            sourceLink: "",
+            bookingID: "BK-1",
+            calendarName: "NewCal",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        // Inject global remove failure: removing old event fails AND rollback removing new event also fails
+        fakeStore.shouldFailRemove = true
+
+        do {
+            _ = try await engine.syncSource(
+                source: sourceNew,
+                extraction: ExtractionResult(allEvents: [eventNew], filteredEvents: [eventNew], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+                state: &state,
+                upcomingOnly: false,
+                previewOnly: false,
+                aiApprovals: []
+            )
+            XCTFail("Should have thrown explicit double failure")
+        } catch let error as AppFailure {
+            switch error {
+            case .syncFailed(let msg):
+                XCTAssertTrue(msg.contains("Cross-calendar migration failed: could not remove old event"), "Error message must report migration failure: \(msg)")
+                XCTAssertTrue(msg.contains("rollback removal of new event"), "Error message must report rollback failure: \(msg)")
+            default:
+                XCTFail("Unexpected error type: \(error)")
+            }
+        } catch {
+            XCTFail("Expected AppFailure.syncFailed but got \(error)")
+        }
+    }
+
+    // 13. P2-2: Undo failure retains undo record for retry without duplicating events
+    func testUndoFailureRetainsUndoRecordForRetry() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Undo Fail Test",
+            source: "/path/to/img.png",
+            bookingID: "TEST",
+            calendar: "Default"
+        )
+
+        let start = makeDate(hour: 10)
+        let end = makeDate(hour: 11)
+        let syncKey = "undo-fail-key"
+
+        let event = fakeStore.makeEvent()
+        event.calendar = fakeStore.calendars(for: .event).first
+        event.title = "Original Title"
+        event.startDate = start
+        event.endDate = end
+        event.url = URL(string: "timeweaver://event?key=\(syncKey)")
+        try fakeStore.save(event, span: .thisEvent, commit: true)
+        let eventID = event.eventIdentifier!
+
+        let beforeSnapshot: [String: StoredEvent] = [:]
+        let afterSnapshot: [String: StoredEvent] = [
+            syncKey: StoredEvent(
+                eventIdentifier: eventID,
+                sourceID: source.stableIdentity,
+                calendar: "Default",
+                title: "Created Title",
+                startISO: iso8601(start),
+                endISO: iso8601(end)
+            )
+        ]
+
+        let undoRecord = ImageImportUndoRecord(
+            sourceIdentityKey: source.stableIdentity,
+            calendarName: "Default",
+            beforeSnapshot: beforeSnapshot,
+            afterSnapshot: afterSnapshot
+        )
+
+        // Inject remove failure during revert
+        fakeStore.shouldFailRemove = true
+
+        do {
+            _ = try await engine.revertImageImport(
+                record: undoRecord,
+                schedulingTimeZoneIdentifier: "Asia/Shanghai"
+            )
+            XCTFail("Should fail remove during undo")
+        } catch {
+            // Revert failed; event remains in store
+            XCTAssertEqual(fakeStore.storedEvents.count, 1)
+        }
+
+        // Now fix the failure condition and retry
+        fakeStore.shouldFailRemove = false
+        let undoSummary = try await engine.revertImageImport(
+            record: undoRecord,
+            schedulingTimeZoneIdentifier: "Asia/Shanghai"
+        )
+        XCTAssertTrue(undoSummary.contains("Removed 1"))
+        XCTAssertEqual(fakeStore.storedEvents.count, 0, "Event removed successfully upon retry")
+    }
+
+    // 14. P2-1: Auto-sync settings regression tests
+    func testAutoSyncSettingsCombinations() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Auto Sync Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "TEAM",
+            calendar: "Default"
+        )
+
+        let start1 = makeDate(hour: 9)
+        let end1 = makeDate(hour: 10)
+        let event1 = ReservationEvent(
+            syncKey: "auto-sync-key-1",
+            legacySyncKey: nil,
+            sourceID: source.stableIdentity,
+            sourceName: "Event 1",
+            sourceLink: "",
+            bookingID: "TEAM",
+            calendarName: "Default",
+            start: start1,
+            end: end1,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        let start2 = makeDate(hour: 11)
+        let end2 = makeDate(hour: 12)
+        let event2 = ReservationEvent(
+            syncKey: "auto-sync-key-2",
+            legacySyncKey: nil,
+            sourceID: source.stableIdentity,
+            sourceName: "Event 2",
+            sourceLink: "",
+            bookingID: "TEAM",
+            calendarName: "Default",
+            start: start2,
+            end: end2,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A2"]
+        )
+
+        // Seed 2 events
+        var state = SyncState()
+        _ = try await engine.syncSource(
+            source: source,
+            extraction: ExtractionResult(allEvents: [event1, event2], filteredEvents: [event1, event2], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+        XCTAssertEqual(fakeStore.storedEvents.count, 2)
+
+        // Case A: Extractor now returns only event1 (event2 is an ordinary removal, not suspicious because extractedCount = 1 > 0)
+        let ordinaryRemovalExtraction = ExtractionResult(
+            allEvents: [event1],
+            filteredEvents: [event1],
+            filteredPastCount: 0,
+            parserLabel: "Rule",
+            parserNotes: [],
+            reviewRequired: false
+        )
+
+        // Preview ordinary removal:
+        let previewReport = try await engine.syncSource(
+            source: source,
+            extraction: ordinaryRemovalExtraction,
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: true,
+            aiApprovals: []
+        )
+        XCTAssertFalse(previewReport.isSuspiciousDeletion, "Ordinary deletion is not suspicious")
+        XCTAssertEqual(previewReport.actions.filter { $0.status == "would delete" }.count, 1)
+
+        // Case B: Ordinary deletion with confirmBeforeDeletion = false allows sync execution to proceed
+        // (In execution, syncSource with isDeletionAuthorized removes the stale event)
+        let executeReport = try await engine.syncSource(
+            source: source,
+            extraction: ordinaryRemovalExtraction,
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+        XCTAssertEqual(executeReport.actions.filter { $0.status == "deleted" }.count, 1)
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Ordinary deletion executed when authorized")
+
+        // Case C: Suspicious deletion (extractedCount = 0 with tracked events present)
+        let suspiciousExtraction = ExtractionResult(
+            allEvents: [],
+            filteredEvents: [],
+            filteredPastCount: 0,
+            parserLabel: "Rule",
+            parserNotes: [],
+            reviewRequired: false
+        )
+        let suspReport = try await engine.syncSource(
+            source: source,
+            extraction: suspiciousExtraction,
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: [],
+            authorizedDeletionSourceIDs: []
+        )
+        XCTAssertTrue(suspReport.isSuspiciousDeletion)
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Suspicious deletion blocked from removing remaining event")
+        XCTAssertEqual(suspReport.actions.first?.status, "deletion rejected: suspicious")
     }
 }

@@ -14,13 +14,13 @@ extension AppModel {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
 
         beginBusyTask(status: "Undoing last image import...")
-        ui.lastImageImportUndo = nil
         Task {
             do {
                 let summary = try await calendarSyncEngine.revertImageImport(
                     record: record,
                     schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier
                 )
+                ui.lastImageImportUndo = nil
                 ui.output = summary
                 ui.status = "Import undone"
             } catch {

@@ -138,10 +138,17 @@ extension CalendarSyncEngine {
                     if let oldToDel = oldEventToDelete {
                         do {
                             try store.remove(oldToDel, span: .thisEvent, commit: true)
-                        } catch {
-                            // If removing old event fails, rollback new event to avoid duplicates
-                            try? store.remove(target, span: .thisEvent, commit: true)
-                            throw error
+                        } catch let removeError {
+                            // If removing old event fails, attempt to rollback the newly created event
+                            do {
+                                try store.remove(target, span: .thisEvent, commit: true)
+                            } catch let rollbackError {
+                                // Both failed: report explicit failure with identifiers so it can be investigated and not ignored
+                                let targetID = target.eventIdentifier ?? "unknown"
+                                let oldID = oldToDel.eventIdentifier ?? "unknown"
+                                throw AppFailure.syncFailed("Cross-calendar migration failed: could not remove old event '\(oldID)' (\(removeError.localizedDescription)), and rollback removal of new event '\(targetID)' also failed (\(rollbackError.localizedDescription)).")
+                            }
+                            throw removeError
                         }
                     }
                 } else if mutation == .update {

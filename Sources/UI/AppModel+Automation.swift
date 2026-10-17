@@ -16,6 +16,10 @@ extension AppModel {
     }
 
     private func runAutomatedSync() {
+        triggerAutomatedSync()
+    }
+
+    func triggerAutomatedSync() {
         if ui.isBusy { return }
         if ui.confirmBeforeSync {
             ui.status = "Auto sync is waiting for manual confirmation"
@@ -179,15 +183,19 @@ extension AppModel {
                     count + report.actions.filter { $0.status == "would delete" }.count
                 }
                 let hasErrors = result.reports.contains { $0.errorMessage != nil }
+                let hasChanges = result.reports.contains { report in
+                    report.actions.contains { ["would create", "would update", "would delete"].contains($0.status) }
+                }
+
                 if hasErrors {
                     ui.status = "Auto sync found source errors"
                 } else if !ui.pendingAIReviews.isEmpty {
                     ui.status = "Auto sync is waiting for AI approval"
                 } else if hasSuspiciousDeletion {
                     ui.status = "Auto sync paused: 0 bookings parsed with scheduled events present"
-                } else if deleteCount > 0 {
+                } else if deleteCount > 0 && ui.confirmBeforeDeletion {
                     ui.status = "Auto sync found removed events waiting for manual confirmation"
-                } else if hasNonDeleteChanges(in: result.reports) {
+                } else if hasChanges {
                     let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
                     ui.pendingSyncPlan = SyncPlan(
                         reports: result.reports,
