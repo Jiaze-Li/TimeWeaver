@@ -157,35 +157,49 @@ private final class TimeWeaverAppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+/// Choose the GUI or no-window entry point before SwiftUI creates scenes.
 @main
-struct TimeWeaverApp: App {
+enum TimeWeaverLauncher {
+    static func main() {
+        if BackgroundCheckLaunch.isRequested() {
+            BackgroundTimeWeaverApp.main()
+        } else {
+            TimeWeaverApp.main()
+        }
+    }
+}
+
+struct BackgroundTimeWeaverApp: App {
     @NSApplicationDelegateAdaptor(TimeWeaverAppDelegate.self) private var delegate
+
+    var body: some Scene {
+        // A settings-only app creates no main window during a cold check.
+        Settings {
+            EmptyView()
+        }
+    }
+}
+
+struct TimeWeaverApp: App {
     @StateObject private var model = AppModel()
     @State private var menuBarExtraInserted = false
 
     var body: some Scene {
-        if BackgroundCheckLaunch.isRequested() {
-            // No WindowGroup means no normal window flashes during cold checks.
-            Settings {
-                EmptyView()
-            }
-        } else {
-            WindowGroup(id: "main") {
-                ContentView()
-                    .environmentObject(model)
-                    .onAppear {
-                        syncAppPresentation(to: model.ui.menuBarModeEnabled)
-                    }
-                    .onChange(of: model.ui.menuBarModeEnabled) { enabled in
-                        syncAppPresentation(to: enabled)
-                    }
-            }
-            .defaultSize(width: 1180, height: 900)
+        WindowGroup(id: "main") {
+            ContentView()
+                .environmentObject(model)
+                .onAppear {
+                    syncAppPresentation(to: model.ui.menuBarModeEnabled)
+                }
+                .onChange(of: model.ui.menuBarModeEnabled) { enabled in
+                    syncAppPresentation(to: enabled)
+                }
+        }
+        .defaultSize(width: 1180, height: 900)
 
-            MenuBarExtra(appDisplayName, systemImage: "calendar.badge.clock", isInserted: $menuBarExtraInserted) {
-                MenuBarContentView()
-                    .environmentObject(model)
-            }
+        MenuBarExtra(appDisplayName, systemImage: "calendar.badge.clock", isInserted: $menuBarExtraInserted) {
+            MenuBarContentView()
+                .environmentObject(model)
         }
     }
 
