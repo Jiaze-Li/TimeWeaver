@@ -153,7 +153,7 @@ extension AppModel {
         checkAndReviewCalendarChanges()
     }
 
-    func checkAndReviewCalendarChanges() {
+    func checkAndReviewCalendarChanges(forceFingerprint: String? = nil) {
         if ui.isBusy || ui.pendingAutoReview != nil { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
@@ -197,16 +197,13 @@ extension AppModel {
 
                 let items = buildAutoReviewChangeItems(from: result.reports)
                 if items.isEmpty {
-                    if !ignoredReviews.isEmpty {
-                        ignoredReviews = []
-                        SettingsStore.saveIgnoredReviews([])
-                    }
+                    // Do not erase ignored reviews when only a subset of sources is enabled.
                     ui.status = "Auto sync checked: no changes"
                     return
                 }
 
                 let fingerprint = computeChangeFingerprint(for: items)
-                if ignoredReviews.contains(where: { $0.fingerprint == fingerprint })
+                if shouldSuppressIgnoredReview(fingerprint: fingerprint, records: ignoredReviews, forceFingerprint: forceFingerprint)
                     || fingerprint == ui.pendingAutoReview?.fingerprint {
                     ui.status = "Auto sync checked: proposed changes already reviewed and dismissed"
                     return
@@ -325,6 +322,9 @@ extension AppModel {
         }
 
         isApplyingBackgroundReview = isBackgroundCheckLaunch
+        // Once accepted, a failed sync should be reported again instead of staying ignored.
+        ignoredReviews.removeAll { $0.fingerprint == review.fingerprint }
+        SettingsStore.saveIgnoredReviews(ignoredReviews)
         closeAutoReviewWindow()
         ui.pendingSyncPlan = review.plan
         runSync(
@@ -344,11 +344,9 @@ extension AppModel {
 
     func revisitIgnoredReview(_ record: IgnoredAutoReview) {
         guard !ui.isBusy && ui.pendingAutoReview == nil else { return }
-        ignoredReviews.removeAll { $0.fingerprint == record.fingerprint }
-        SettingsStore.saveIgnoredReviews(ignoredReviews)
         showIgnoredReviews = false
-        // Re-read the current source and calendar; old snapshots are never executable.
-        checkAndReviewCalendarChanges()
+        // Preserve the entry on errors or no changes; only bypass its suppression once.
+        checkAndReviewCalendarChanges(forceFingerprint: record.fingerprint)
     }
 
     func ignoreAutoReview() {

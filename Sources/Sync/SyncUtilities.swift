@@ -124,3 +124,12 @@ func buildAutoReviewItems(from reports: [SourceSyncReport], existingState: SyncS
     return items
 }
 
+
+/// Ignore is for a proposal fingerprint, not for every future change from its source.
+func shouldSuppressIgnoredReview(
+    fingerprint: String,
+    records: [IgnoredAutoReview],
+    forceFingerprint: String? = nil
+) -> Bool {
+    records.contains { $0.fingerprint == fingerprint } && forceFingerprint != fingerprint
+}

@@ -480,4 +480,15 @@ final class AutoCheckAndReviewTests: XCTestCase {
         XCTAssertFalse(BackgroundCheckLaunch.isRequested(arguments: ["/bin/TimeWeaver"]))
         XCTAssertFalse(BackgroundCheckLaunch.isRequested(arguments: ["/bin/TimeWeaver", "--background-check"]))
     }
+    func testIgnoredReviewOnlySuppressesExactProposalAndCanBeRechecked() {
+        let old = AutoReviewChangeItem(sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "Ignored", oldStart: nil, oldEnd: nil, newStart: makeDate(hour: 10),
+            newEnd: makeDate(hour: 11), syncKey: "prior")
+        let fingerprint = computeFingerprint(for: [old])
+        let record = IgnoredAutoReview(fingerprint: fingerprint, ignoredAt: Date(), items: [old])
+        XCTAssertTrue(shouldSuppressIgnoredReview(fingerprint: fingerprint, records: [record]))
+        XCTAssertFalse(shouldSuppressIgnoredReview(fingerprint: fingerprint, records: [record],
+            forceFingerprint: fingerprint))
+        XCTAssertFalse(shouldSuppressIgnoredReview(fingerprint: "new-proposal", records: [record]))
+    }
 }
