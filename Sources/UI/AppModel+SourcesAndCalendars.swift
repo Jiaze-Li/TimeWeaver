@@ -135,8 +135,9 @@ extension AppModel {
     }
 
     func confirmPendingSync() {
+        let authorizedIDs = ui.pendingSyncConfirmation?.authorizedDeletionSourceIDs ?? []
         ui.pendingSyncConfirmation = nil
-        runSync(previewOnly: false)
+        runSync(previewOnly: false, authorizedDeletionSourceIDs: authorizedIDs)
     }
 
     func cancelPendingSync() {

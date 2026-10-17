@@ -139,7 +139,8 @@ extension AppModel {
         }
         lines.append("")
         lines.append("Continue?")
-        return PendingSyncConfirmation(message: lines.joined(separator: "\n"))
+        let authorizedIDs = Set(suspiciousReports.map(\.sourceItemID))
+        return PendingSyncConfirmation(message: lines.joined(separator: "\n"), authorizedDeletionSourceIDs: authorizedIDs)
     }
 
     private func hasNonDeleteChanges(in reports: [SourceSyncReport]) -> Bool {

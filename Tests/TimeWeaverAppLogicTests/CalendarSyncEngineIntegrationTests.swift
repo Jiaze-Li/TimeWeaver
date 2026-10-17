@@ -510,4 +510,417 @@ final class CalendarSyncEngineIntegrationTests: XCTestCase {
         let finalState = stateStore.loadState()
         XCTAssertEqual(finalState.events.count, 0, "SyncState should be back to empty")
     }
+
+    // 7. P1-1: Deletion protection actively prevents deletion when unauthorized, and permits deletion when authorized
+    func testUnauthorizedSuspiciousDeletionDoesNotDeleteEvents() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Suspicious Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "TEAM",
+            calendar: "Default"
+        )
+
+        let start = makeDate(hour: 14)
+        let end = makeDate(hour: 15)
+        let event = ReservationEvent(
+            syncKey: "suspicious-key-1",
+            legacySyncKey: nil,
+            sourceID: source.id.uuidString,
+            sourceName: "Existing Event",
+            sourceLink: "",
+            bookingID: "TEAM",
+            calendarName: "Default",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        // Seed 1 event
+        var state = SyncState()
+        _ = try await engine.syncSource(
+            source: source,
+            extraction: ExtractionResult(allEvents: [event], filteredEvents: [event], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+        XCTAssertEqual(fakeStore.storedEvents.count, 1)
+
+        // Now parser returns 0 events (suspicious deletion)
+        let emptyExtraction = ExtractionResult(allEvents: [], filteredEvents: [], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false)
+
+        // Run sync WITHOUT authorization
+        let unauthReport = try await engine.syncSource(
+            source: source,
+            extraction: emptyExtraction,
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: [],
+            authorizedDeletionSourceIDs: []
+        )
+
+        XCTAssertTrue(unauthReport.isSuspiciousDeletion)
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Calendar event must NOT be deleted without authorization")
+        XCTAssertEqual(state.events.count, 1, "SyncState must preserve tracked events when deletion is suspicious and unauthorized")
+        XCTAssertEqual(unauthReport.actions.first?.status, "deletion rejected: suspicious")
+
+        // Now run sync WITH explicit authorization
+        let authReport = try await engine.syncSource(
+            source: source,
+            extraction: emptyExtraction,
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: [],
+            authorizedDeletionSourceIDs: [source.id]
+        )
+
+        XCTAssertTrue(authReport.isSuspiciousDeletion)
+        XCTAssertEqual(fakeStore.storedEvents.count, 0, "Calendar event should be deleted when explicitly authorized")
+        XCTAssertEqual(state.events.count, 0, "SyncState should remove deleted key")
+        XCTAssertEqual(authReport.actions.first?.status, "deleted")
+    }
+
+    // 8. P1-2: Cross-calendar migration failure and rollback
+    func testCrossCalendarMigrationFailureAndRollback() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "OldCal")
+        _ = fakeStore.addCalendar(title: "NewCal")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let sourceID = UUID()
+        let sourceOld = SourceItem(
+            id: sourceID,
+            enabled: true,
+            name: "Rollback Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "BK-1",
+            calendar: "OldCal"
+        )
+
+        let start = makeDate(hour: 10)
+        let end = makeDate(hour: 11)
+        let eventOld = ReservationEvent(
+            syncKey: "migration-key-1",
+            legacySyncKey: nil,
+            sourceID: sourceOld.id.uuidString,
+            sourceName: "Meeting",
+            sourceLink: "",
+            bookingID: "BK-1",
+            calendarName: "OldCal",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        var state = SyncState()
+        _ = try await engine.syncSource(
+            source: sourceOld,
+            extraction: ExtractionResult(allEvents: [eventOld], filteredEvents: [eventOld], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+        XCTAssertEqual(fakeStore.storedEvents.count, 1)
+
+        let sourceNew = SourceItem(
+            id: sourceID,
+            enabled: true,
+            name: "Rollback Test",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "BK-1",
+            calendar: "NewCal"
+        )
+        let eventNew = ReservationEvent(
+            syncKey: "migration-key-1",
+            legacySyncKey: nil,
+            sourceID: sourceNew.id.uuidString,
+            sourceName: "Meeting",
+            sourceLink: "",
+            bookingID: "BK-1",
+            calendarName: "NewCal",
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["A1"]
+        )
+
+        let oldEventID = fakeStore.storedEvents.keys.first!
+        // Inject remove failure when deleting old event during cross-calendar move
+        fakeStore.removeFailureIdentifier = oldEventID
+
+        do {
+            _ = try await engine.syncSource(
+                source: sourceNew,
+                extraction: ExtractionResult(allEvents: [eventNew], filteredEvents: [eventNew], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+                state: &state,
+                upcomingOnly: false,
+                previewOnly: false,
+                aiApprovals: []
+            )
+            XCTFail("Should have thrown remove failure")
+        } catch {
+            // Error caught; verify rollback occurred: new event removed, old event kept, no duplicate
+            XCTAssertEqual(fakeStore.storedEvents.count, 1, "Should rollback newly created event so only 1 event remains")
+            let remaining = fakeStore.storedEvents.values.first
+            XCTAssertEqual(remaining?.calendar?.title, "OldCal", "Old event must be preserved in OldCal")
+        }
+    }
+
+    // 9. P1-3: Historical FNV-1a Hash Source Identity Migration with Real Data
+    func testHistoricalLegacyHashMigrationRealData() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        // User had an old source before the stable UUID model
+        let oldName = "Historic Room"
+        let oldSource = "/path/to/historic.xlsx"
+        let oldBookingID = "OLD-999"
+        let oldCalendar = "Default"
+        let legacySourceID = TimeWeaverCore.fnv1a64Hex("\(oldName)|\(oldSource)|\(oldBookingID)|\(oldCalendar)")
+        let legacySyncKey = TimeWeaverCore.fnv1a64Hex("\(legacySourceID)|Sheet1|B2|\(oldBookingID)")
+
+        let start = makeDate(hour: 9)
+        let end = makeDate(hour: 10)
+        let customURL = URL(string: "timeweaver://event?key=\(legacySyncKey)")!
+
+        // Seed old event in FakeCalendarStore and old SyncState using legacySourceID and legacySyncKey
+        let existingEvent = fakeStore.makeEvent()
+        existingEvent.calendar = fakeStore.calendars(for: .event).first
+        existingEvent.title = "Historic Meeting"
+        existingEvent.startDate = start
+        existingEvent.endDate = end
+        existingEvent.url = customURL
+        try fakeStore.save(existingEvent, span: .thisEvent, commit: true)
+        let eventID = existingEvent.eventIdentifier!
+
+        var state = SyncState()
+        state.events[legacySyncKey] = StoredEvent(
+            eventIdentifier: eventID,
+            sourceID: legacySourceID,
+            calendar: oldCalendar,
+            title: "Historic Meeting",
+            startISO: iso8601(start),
+            endISO: iso8601(end)
+        )
+
+        // User now runs TimeWeaver with new stable UUID SourceItem, but Source attributes are identical
+        let sourceItem = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: oldName,
+            source: oldSource,
+            bookingID: oldBookingID,
+            calendar: oldCalendar
+        )
+
+        let newSyncKey = TimeWeaverCore.fnv1a64Hex("\(sourceItem.stableIdentity)|Sheet1|B2")
+        let newEvent = ReservationEvent(
+            syncKey: newSyncKey,
+            legacySyncKey: legacySyncKey,
+            sourceID: sourceItem.stableIdentity,
+            sourceName: "Historic Meeting",
+            sourceLink: "",
+            bookingID: oldBookingID,
+            calendarName: oldCalendar,
+            start: start,
+            end: end,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["B2"]
+        )
+
+        let report = try await engine.syncSource(
+            source: sourceItem,
+            extraction: ExtractionResult(allEvents: [newEvent], filteredEvents: [newEvent], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: false,
+            aiApprovals: []
+        )
+
+        // Verify: The event was matched via legacySyncKey, updated/unchanged without duplication, and migrated in state
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Must not duplicate historical event")
+        XCTAssertEqual(state.events.count, 1, "Must have exactly 1 event in state")
+        XCTAssertNil(state.events[legacySyncKey], "Legacy sync key must be migrated away")
+        XCTAssertNotNil(state.events[newSyncKey], "New stable sync key must be stored")
+        XCTAssertEqual(state.events[newSyncKey]?.eventIdentifier, eventID)
+        XCTAssertEqual(state.events[newSyncKey]?.sourceID, sourceItem.stableIdentity)
+    }
+
+    // 10. P1-4: Undo Updates Same Event In-Place Without Recreation
+    func testUndoUpdatesSameEventInPlaceWithoutRecreation() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Undo In Place",
+            source: "/path/to/img.png",
+            bookingID: "TEST",
+            calendar: "Default"
+        )
+
+        let start = makeDate(hour: 10)
+        let end = makeDate(hour: 11)
+        let syncKey = "inplace-undo-key"
+
+        // Create initial event
+        let event = fakeStore.makeEvent()
+        event.calendar = fakeStore.calendars(for: .event).first
+        event.title = "Original Title"
+        event.startDate = start
+        event.endDate = end
+        event.url = URL(string: "timeweaver://event?key=\(syncKey)")
+        try fakeStore.save(event, span: .thisEvent, commit: true)
+        let eventID = event.eventIdentifier!
+
+        let beforeSnapshot: [String: StoredEvent] = [
+            syncKey: StoredEvent(
+                eventIdentifier: eventID,
+                sourceID: source.stableIdentity,
+                calendar: "Default",
+                title: "Original Title",
+                startISO: iso8601(start),
+                endISO: iso8601(end)
+            )
+        ]
+
+        // User imported an update (title and time modified)
+        let newStart = makeDate(hour: 11)
+        let newEnd = makeDate(hour: 12)
+        event.title = "Updated Title"
+        event.startDate = newStart
+        event.endDate = newEnd
+        try fakeStore.save(event, span: .thisEvent, commit: true)
+
+        let afterSnapshot: [String: StoredEvent] = [
+            syncKey: StoredEvent(
+                eventIdentifier: eventID, // same EKEvent identifier
+                sourceID: source.stableIdentity,
+                calendar: "Default",
+                title: "Updated Title",
+                startISO: iso8601(newStart),
+                endISO: iso8601(newEnd)
+            )
+        ]
+
+        let undoRecord = ImageImportUndoRecord(
+            sourceIdentityKey: source.stableIdentity,
+            calendarName: "Default",
+            beforeSnapshot: beforeSnapshot,
+            afterSnapshot: afterSnapshot
+        )
+
+        let undoResult = try await engine.revertImageImport(
+            record: undoRecord,
+            schedulingTimeZoneIdentifier: "Asia/Shanghai"
+        )
+
+        XCTAssertTrue(undoResult.contains("Restored 1"))
+        XCTAssertEqual(fakeStore.storedEvents.count, 1, "Must not create duplicate events")
+        let restored = fakeStore.storedEvents[eventID]
+        XCTAssertNotNil(restored, "Original event ID must be preserved")
+        XCTAssertEqual(restored?.title, "Original Title")
+        XCTAssertEqual(restored?.startDate, start)
+        XCTAssertEqual(restored?.endDate, end)
+    }
+
+    // 11. P2-1: Preview does not mutate existing EKEvent objects in memory
+    func testPreviewDoesNotMutateExistingEKEventInMemory() async throws {
+        let fakeStore = FakeCalendarStore()
+        _ = fakeStore.addCalendar(title: "Default")
+        let stateStore = MemorySyncStateStore()
+        let engine = CalendarSyncEngine(store: fakeStore, stateStore: stateStore)
+
+        let source = SourceItem(
+            id: UUID(),
+            enabled: true,
+            name: "Preview Imm Name",
+            source: "/path/to/sheet.xlsx",
+            bookingID: "TEAM",
+            calendar: "Default"
+        )
+
+        let originalStart = makeDate(hour: 10)
+        let originalEnd = makeDate(hour: 11)
+        let syncKey = "preview-imm-key"
+
+        let existingEvent = fakeStore.makeEvent()
+        existingEvent.calendar = fakeStore.calendars(for: .event).first
+        existingEvent.title = "Original EK Title"
+        existingEvent.startDate = originalStart
+        existingEvent.endDate = originalEnd
+        existingEvent.notes = "Original Notes"
+        existingEvent.url = URL(string: "timeweaver://event?key=\(syncKey)")
+        try fakeStore.save(existingEvent, span: .thisEvent, commit: true)
+        let originalID = existingEvent.eventIdentifier!
+
+        var state = SyncState()
+        state.events[syncKey] = StoredEvent(
+            eventIdentifier: originalID,
+            sourceID: source.stableIdentity,
+            calendar: "Default",
+            title: "Original EK Title",
+            startISO: iso8601(originalStart),
+            endISO: iso8601(originalEnd)
+        )
+
+        // Incoming extraction proposes different title and times
+        let proposedStart = makeDate(hour: 14)
+        let proposedEnd = makeDate(hour: 16)
+        let incomingEvent = ReservationEvent(
+            syncKey: syncKey,
+            legacySyncKey: nil,
+            sourceID: source.stableIdentity,
+            sourceName: "New Proposed Title",
+            sourceLink: "New Notes",
+            bookingID: "TEAM",
+            calendarName: "Default",
+            start: proposedStart,
+            end: proposedEnd,
+            isAllDay: false,
+            sheetNames: ["Sheet1"],
+            cellReferences: ["Z9"]
+        )
+
+        let previewReport = try await engine.syncSource(
+            source: source,
+            extraction: ExtractionResult(allEvents: [incomingEvent], filteredEvents: [incomingEvent], filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false),
+            state: &state,
+            upcomingOnly: false,
+            previewOnly: true, // Preview mode!
+            aiApprovals: []
+        )
+
+        XCTAssertEqual(previewReport.actions.first?.status, "would update")
+
+        // Critical verification: The EKEvent object in memory must NOT have been mutated!
+        let storedInFake = fakeStore.storedEvents[originalID]
+        XCTAssertEqual(storedInFake?.title, "Original EK Title", "Preview must not mutate existing EKEvent title")
+        XCTAssertEqual(storedInFake?.startDate, originalStart, "Preview must not mutate existing EKEvent start date")
+        XCTAssertEqual(storedInFake?.endDate, originalEnd, "Preview must not mutate existing EKEvent end date")
+        XCTAssertEqual(storedInFake?.notes, "Original Notes", "Preview must not mutate existing EKEvent notes")
+    }
 }

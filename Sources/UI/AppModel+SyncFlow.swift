@@ -31,7 +31,7 @@ extension AppModel {
         }
     }
 
-    func runSync(previewOnly: Bool) {
+    func runSync(previewOnly: Bool, authorizedDeletionSourceIDs: Set<UUID> = []) {
         if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
@@ -64,7 +64,8 @@ extension AppModel {
                     sources: enabledSources,
                     upcomingOnly: ui.upcomingOnly,
                     previewOnly: previewOnly,
-                    cachedExtractions: cachedExtractions
+                    cachedExtractions: cachedExtractions,
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
                 )
                 if previewOnly {
                     ui.output = result.outputText

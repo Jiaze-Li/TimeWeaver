@@ -12,7 +12,8 @@ extension CalendarSyncEngine {
         aiApprovals: [AIApprovalRecord],
         schedulingTimeZoneIdentifier: String,
         eventOverrides: [String: EventOverride] = [:],
-        cachedExtractions: [UUID: ExtractionResult] = [:]
+        cachedExtractions: [UUID: ExtractionResult] = [:],
+        authorizedDeletionSourceIDs: Set<UUID> = []
     ) async throws -> SyncRunResult {
         try await ensureAccess()
         let schedulingTimeZone = TimeZone(identifier: schedulingTimeZoneIdentifier) ?? .current
@@ -50,7 +51,8 @@ extension CalendarSyncEngine {
                     upcomingOnly: upcomingOnly,
                     previewOnly: previewOnly,
                     aiApprovals: aiApprovals,
-                    eventOverrides: eventOverrides
+                    eventOverrides: eventOverrides,
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
                 )
                 reports.append(report)
 

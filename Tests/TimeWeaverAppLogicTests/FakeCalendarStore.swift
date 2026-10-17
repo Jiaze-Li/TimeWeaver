@@ -7,30 +7,38 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     var storedCalendars: [EKCalendar] = []
     var storedEvents: [String: EKEvent] = [:] // id -> EKEvent
     var removedEvents: [String: EKEvent] = [:]
+    var shouldFailSave: Bool = false
+    var shouldFailRemove: Bool = false
+    var removeFailureIdentifier: String? = nil
     private let eventStore = EKEventStore()
-    private static var isSwizzled = false
     private static var associatedKey: UInt8 = 0
-
-    init() {
-        Self.ensureSwizzled()
-    }
-
-    private static func ensureSwizzled() {
-        guard !isSwizzled else { return }
-        isSwizzled = true
-        let swizzledBlock: @convention(block) (AnyObject) -> String? = { obj in
-            if let custom = objc_getAssociatedObject(obj, &associatedKey) as? String {
+    private static let fakeSubclass: AnyClass? = {
+        guard let originalClass = objc_getClass("EKEvent") as? AnyClass else { return nil }
+        let subclassName = "FakeEKEventSubclass_\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        guard let subcls = objc_allocateClassPair(originalClass, subclassName, 0) else { return nil }
+        
+        let idGetterBlock: @convention(block) (AnyObject) -> String? = { obj in
+            if let custom = objc_getAssociatedObject(obj, &FakeCalendarStore.associatedKey) as? String {
                 return custom
             }
             return nil
         }
-        let newImp = imp_implementationWithBlock(swizzledBlock)
-        if let method = class_getInstanceMethod(EKEvent.self, #selector(getter: EKEvent.eventIdentifier)) {
-            method_setImplementation(method, newImp)
+        let imp = imp_implementationWithBlock(idGetterBlock)
+        let selector = #selector(getter: EKEvent.eventIdentifier)
+        if let originalMethod = class_getInstanceMethod(originalClass, selector) {
+            let types = method_getTypeEncoding(originalMethod)
+            class_addMethod(subcls, selector, imp, types)
         }
-    }
+        objc_registerClassPair(subcls)
+        return subcls
+    }()
+
+    init() {}
 
     func setCustomIdentifier(_ id: String, on event: EKEvent) {
+        if let subcls = Self.fakeSubclass {
+            object_setClass(event, subcls)
+        }
         objc_setAssociatedObject(event, &Self.associatedKey, id, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
@@ -66,6 +74,9 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     }
 
     func save(_ event: EKEvent, span: EKSpan, commit: Bool) throws {
+        if shouldFailSave {
+            throw AppFailure.syncFailed("Injected save failure")
+        }
         if event.eventIdentifier == nil || event.eventIdentifier.isEmpty {
             let id = UUID().uuidString
             setCustomIdentifier(id, on: event)
@@ -74,6 +85,9 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     }
 
     func remove(_ event: EKEvent, span: EKSpan, commit: Bool) throws {
+        if shouldFailRemove || (removeFailureIdentifier != nil && event.eventIdentifier == removeFailureIdentifier) {
+            throw AppFailure.syncFailed("Injected remove failure")
+        }
         if let id = event.eventIdentifier {
             storedEvents.removeValue(forKey: id)
             removedEvents[id] = event
@@ -81,7 +95,11 @@ final class FakeCalendarStore: CalendarStoreProtocol {
     }
 
     func makeEvent() -> EKEvent {
-        return EKEvent(eventStore: eventStore)
+        let event = EKEvent(eventStore: eventStore)
+        if let subcls = Self.fakeSubclass {
+            object_setClass(event, subcls)
+        }
+        return event
     }
 
     @available(macOS 14.0, *)

@@ -73,7 +73,12 @@ SyncState (持久化存储已同步事件指纹，保持幂等与撤销能力)
 2. **预览与执行一致性 (SyncPlan Cache & Invalidation)**:
    - Preview 产生的解析结果保存在 `SyncPlan` 中；用户确认执行时复用该解析结果，杜绝二次解析导致的数据漂移。
    - 任何修改配置、切换 Source、修改工作时间等操作，必须显式调用 `invalidatePendingSyncPlan()`。
-3. **删除保护机制**:
-   - 当解析结果为 0 且历史存在已同步事件时，触发 `isDeletionSuspicious`，阻止意外清空日历。
-4. **人工编辑生效保障**:
+3. **删除保护机制 (Execution-Layer Deletion Protection)**:
+   - 当解析结果为 0 且历史存在已同步事件时，触发 `isDeletionSuspicious`。
+   - 同步执行路径（`syncSource`）强制实施保护：未显式授权（`authorizedDeletionSourceIDs`）时，引擎直接阻断删除操作，保留原日历事件与 SyncState 记录，防止意外清空日历。自动同步与定时后台同步绝不绕过该保护。
+4. **跨日历迁移安全与回滚 (Safe Migration & Rollback)**:
+   - 跨日历迁移时先在目标日历安全创建并保存新事件，再删除旧日历事件；若删除旧事件失败，自动回滚移除新事件并向上抛出异常，杜绝旧事件静默丢失或跨日历重复。
+5. **Undo 原位恢复 (Undo In-Place)**:
+   - 撤销更新时对比事件内容（标题、起止时间），原位更新已有日历事件，避免删除并重建带来的事件标识突变或重复。
+6. **人工编辑生效保障**:
    - 图片导入预览界面允许修改事件标题、开始与结束时间。所有修改经 `EventOverride` 传递并在写入 EventKit 时进行严格时间区间合法性校验（`start < end`）。

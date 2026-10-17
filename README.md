@@ -66,7 +66,7 @@ This builds:
 ./build/TimeWeaver.app
 ```
 
-For architecture details, synchronization workflow, and system constraints, see [ARCHITECTURE.md](file:///Users/jack/Downloads/scripts/TimeWeaver/ARCHITECTURE.md).
+For architecture details, synchronization workflow, and system constraints, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Build a DMG
 

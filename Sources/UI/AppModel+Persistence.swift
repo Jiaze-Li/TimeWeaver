@@ -105,7 +105,8 @@ extension AppModel {
         previewOnly: Bool,
         aiApprovals: [AIApprovalRecord]? = nil,
         eventOverrides: [String: EventOverride] = [:],
-        cachedExtractions: [UUID: ExtractionResult] = [:]
+        cachedExtractions: [UUID: ExtractionResult] = [:],
+        authorizedDeletionSourceIDs: Set<UUID> = []
     ) async throws -> SyncRunResult {
         try await calendarSyncEngine.sync(
             sources: sources,
@@ -117,7 +118,8 @@ extension AppModel {
             aiApprovals: aiApprovals ?? ui.aiApprovals,
             schedulingTimeZoneIdentifier: ui.schedulingTimeZoneIdentifier,
             eventOverrides: eventOverrides,
-            cachedExtractions: cachedExtractions
+            cachedExtractions: cachedExtractions,
+            authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
         )
     }
 

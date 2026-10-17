@@ -9,6 +9,18 @@ func eventSignature(_ event: EKEvent) -> String {
     "\(event.title ?? "")|\(event.startDate.timeIntervalSince1970)|\(event.endDate.timeIntervalSince1970)|\(event.isAllDay)|\(event.notes ?? "")|\(event.url?.absoluteString ?? "")|\(event.calendar?.title ?? "")"
 }
 
+func proposedEventSignature(
+    title: String,
+    start: Date,
+    end: Date,
+    isAllDay: Bool,
+    notes: String?,
+    url: URL?,
+    calendarTitle: String
+) -> String {
+    "\(title)|\(start.timeIntervalSince1970)|\(end.timeIntervalSince1970)|\(isAllDay)|\(notes ?? "")|\(url?.absoluteString ?? "")|\(calendarTitle)"
+}
+
 func digest(_ text: String) -> String {
     TimeWeaverCore.fnv1a64Hex(text)
 }

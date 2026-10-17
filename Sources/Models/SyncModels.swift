@@ -99,6 +99,7 @@ struct DeleteCandidate {
 struct PendingSyncConfirmation: Identifiable {
     var id = UUID()
     var message: String
+    var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 
 struct ImageImportUndoRecord {
