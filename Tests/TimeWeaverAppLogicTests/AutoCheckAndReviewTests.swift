@@ -452,4 +452,32 @@ final class AutoCheckAndReviewTests: XCTestCase {
         XCTAssertEqual(f.calendar.storedEvents.values.first?.startDate, externalStart)
         XCTAssertEqual(f.state.loadState().events.count, 1)
     }
+    func testIgnoredReviewSurvivesSerialization() throws {
+        let item = AutoReviewChangeItem(sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "Ignored", oldStart: nil, oldEnd: nil, newStart: makeDate(hour: 10),
+            newEnd: makeDate(hour: 11), syncKey: "persist-key")
+        let record = IgnoredAutoReview(fingerprint: computeFingerprint(for: [item]),
+            ignoredAt: Date(timeIntervalSince1970: 1234), items: [item])
+        let decoded = try JSONDecoder().decode([IgnoredAutoReview].self, from: JSONEncoder().encode([record]))
+        XCTAssertEqual(decoded, [record])
+        XCTAssertTrue(decoded.contains { $0.fingerprint == computeFingerprint(for: [item]) })
+    }
+
+    func testNewChangesDoNotMatchIgnoredReviewFingerprint() {
+        let old = AutoReviewChangeItem(sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "Old", oldStart: nil, oldEnd: nil, newStart: makeDate(hour: 10),
+            newEnd: makeDate(hour: 11), syncKey: "old")
+        let fresh = AutoReviewChangeItem(sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "New", oldStart: nil, oldEnd: nil, newStart: makeDate(hour: 12),
+            newEnd: makeDate(hour: 13), syncKey: "new")
+        let ignored = IgnoredAutoReview(fingerprint: computeFingerprint(for: [old]),
+            ignoredAt: Date(), items: [old])
+        XCTAssertNotEqual(ignored.fingerprint, computeFingerprint(for: [old, fresh]))
+    }
+
+    func testBackgroundCheckRequiresExactLaunchArgument() {
+        XCTAssertTrue(BackgroundCheckLaunch.isRequested(arguments: ["/bin/TimeWeaver", "--background-check-once"]))
+        XCTAssertFalse(BackgroundCheckLaunch.isRequested(arguments: ["/bin/TimeWeaver"]))
+        XCTAssertFalse(BackgroundCheckLaunch.isRequested(arguments: ["/bin/TimeWeaver", "--background-check"]))
+    }
 }

@@ -106,6 +106,9 @@ extension AppModel {
                 ui.status = error.localizedDescription
             }
             ui.isBusy = false
+            if isBackgroundCheckLaunch && isApplyingBackgroundReview {
+                NSApp.terminate(nil)
+            }
         }
     }
 

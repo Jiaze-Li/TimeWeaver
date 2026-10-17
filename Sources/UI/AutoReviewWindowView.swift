@@ -74,7 +74,7 @@ struct AutoReviewWindowView: View {
     }
 }
 
-private struct AutoReviewItemRow: View {
+struct AutoReviewItemRow: View {
     let item: AutoReviewChangeItem
 
     var body: some View {

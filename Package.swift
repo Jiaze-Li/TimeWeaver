@@ -40,7 +40,8 @@ let package = Package(
                 "UI/Components",
                 "UI/ContentView.swift",
                 "UI/ImageImportReviewSheet.swift",
-                "UI/AutoReviewWindowView.swift"
+                "UI/AutoReviewWindowView.swift",
+                "UI/IgnoredChangesSheet.swift"
             ],
             sources: [
                 "Models/AppIdentity.swift",

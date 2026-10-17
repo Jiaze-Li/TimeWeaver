@@ -27,6 +27,9 @@ struct ContentView: View {
         .padding(.bottom, 16)
         .frame(minWidth: 640, minHeight: 620)
         .overlay(syncLoadingOverlay)
+        .sheet(isPresented: $model.showIgnoredReviews) {
+            IgnoredChangesSheet().environmentObject(model)
+        }
         .sheet(item: $model.ui.pendingImageImportReview) { review in
             ImageImportReviewSheet(review: review)
                 .environmentObject(model)

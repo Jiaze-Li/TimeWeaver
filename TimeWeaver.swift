@@ -139,27 +139,53 @@ private func applyAppPresentation(menuBarModeEnabled: Bool) {
     NSApp.setActivationPolicy(menuBarModeEnabled ? .accessory : .regular)
 }
 
+private final class TimeWeaverAppDelegate: NSObject, NSApplicationDelegate {
+    private var backgroundModel: AppModel?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard BackgroundCheckLaunch.isRequested() else { return }
+        NSApp.setActivationPolicy(.accessory)
+        Task { @MainActor in
+            let model = AppModel()
+            self.backgroundModel = model
+            guard model.ui.autoSyncEnabled else {
+                NSApp.terminate(nil)
+                return
+            }
+            model.checkAndReviewCalendarChanges()
+        }
+    }
+}
+
 @main
 struct TimeWeaverApp: App {
+    @NSApplicationDelegateAdaptor(TimeWeaverAppDelegate.self) private var delegate
     @StateObject private var model = AppModel()
     @State private var menuBarExtraInserted = false
 
     var body: some Scene {
-        WindowGroup(id: "main") {
-            ContentView()
-                .environmentObject(model)
-                .onAppear {
-                    syncAppPresentation(to: model.ui.menuBarModeEnabled)
-                }
-                .onChange(of: model.ui.menuBarModeEnabled) { enabled in
-                    syncAppPresentation(to: enabled)
-                }
-        }
-        .defaultSize(width: 1180, height: 900)
+        if BackgroundCheckLaunch.isRequested() {
+            // No WindowGroup means no normal window flashes during cold checks.
+            Settings {
+                EmptyView()
+            }
+        } else {
+            WindowGroup(id: "main") {
+                ContentView()
+                    .environmentObject(model)
+                    .onAppear {
+                        syncAppPresentation(to: model.ui.menuBarModeEnabled)
+                    }
+                    .onChange(of: model.ui.menuBarModeEnabled) { enabled in
+                        syncAppPresentation(to: enabled)
+                    }
+            }
+            .defaultSize(width: 1180, height: 900)
 
-        MenuBarExtra(appDisplayName, systemImage: "calendar.badge.clock", isInserted: $menuBarExtraInserted) {
-            MenuBarContentView()
-                .environmentObject(model)
+            MenuBarExtra(appDisplayName, systemImage: "calendar.badge.clock", isInserted: $menuBarExtraInserted) {
+                MenuBarContentView()
+                    .environmentObject(model)
+            }
         }
     }
 

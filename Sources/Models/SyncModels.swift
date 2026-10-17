@@ -102,7 +102,7 @@ struct PendingSyncConfirmation: Identifiable {
     var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 
-struct AutoReviewChangeItem: Identifiable, Equatable {
+struct AutoReviewChangeItem: Identifiable, Codable, Equatable {
     var id: String { "\(sourceName)|\(status)|\(title)|\(syncKey)" }
     var sourceName: String
     var calendarName: String
@@ -113,6 +113,14 @@ struct AutoReviewChangeItem: Identifiable, Equatable {
     var newStart: Date?
     var newEnd: Date?
     var syncKey: String
+}
+
+/// A dismissed snapshot. Reopening it always requires a fresh preview.
+struct IgnoredAutoReview: Codable, Identifiable, Equatable {
+    var id: String { fingerprint }
+    var fingerprint: String
+    var ignoredAt: Date
+    var items: [AutoReviewChangeItem]
 }
 
 struct PendingAutoReview: Identifiable {

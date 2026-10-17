@@ -1,5 +1,13 @@
 import Foundation
 
+enum BackgroundCheckLaunch {
+    static let argument = "--background-check-once"
+
+    static func isRequested(arguments: [String] = CommandLine.arguments) -> Bool {
+        arguments.contains(argument)
+    }
+}
+
 struct LaunchAutomation: Codable {
     private static let controlFileURL = URL(fileURLWithPath: "/tmp/timeweaver_launch_automation.json")
 

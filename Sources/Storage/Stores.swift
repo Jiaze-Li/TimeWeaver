@@ -11,6 +11,7 @@ private let legacyAppSupportDirectory = appSupportBaseDirectory()
     .appendingPathComponent(legacyAppSupportDirectoryName, isDirectory: true)
 private let settingsURL = appSupportDirectory.appendingPathComponent("settings.json")
 private let stateURL = appSupportDirectory.appendingPathComponent("sync-state.json")
+private let ignoredReviewsURL = appSupportDirectory.appendingPathComponent("ignored-reviews.json")
 private let legacyMigrationMarkerURL = appSupportDirectory.appendingPathComponent(".legacy-migration-complete")
 
 private let aiKeychainService = "TimeWeaver"
@@ -198,6 +199,24 @@ final class SettingsStore {
             let data = try JSONEncoder().encode(settings)
             try data.write(to: settingsURL, options: .atomic)
         } catch {
+        }
+    }
+
+    static func loadIgnoredReviews() -> [IgnoredAutoReview] {
+        try? ensureStorageReady()
+        guard let data = try? Data(contentsOf: ignoredReviewsURL),
+              let records = try? JSONDecoder().decode([IgnoredAutoReview].self, from: data) else {
+            return []
+        }
+        return records
+    }
+
+    static func saveIgnoredReviews(_ records: [IgnoredAutoReview]) {
+        do {
+            try ensureStorageReady()
+            try JSONEncoder().encode(records).write(to: ignoredReviewsURL, options: .atomic)
+        } catch {
+            NSLog("TimeWeaver could not save ignored reviews: %@", error.localizedDescription)
         }
     }
 

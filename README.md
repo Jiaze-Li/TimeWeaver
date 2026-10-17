@@ -31,7 +31,7 @@ TimeWeaver is no longer positioned as a PPMS-only utility. The product goal is:
 - Preview before sync
 - Sync confirmation with change counts
 - Optional confirmation before deleting removed events
-- Auto sync while the app is open
+- Auto review while the app is open, with optional scheduled cold checks when closed
 - Optional menu bar mode
 - Drag-and-drop image import with immediate preview/confirm flow
 - AI providers with presets:
@@ -67,6 +67,36 @@ This builds:
 ```
 
 For architecture details, synchronization workflow, and system constraints, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Optional 10-minute background checks
+
+TimeWeaver can be launched briefly by a macOS **user LaunchAgent** every 600 seconds.
+When nothing has changed, the app exits without opening its main window.
+When there are changes, the usual Review dialog appears; Accept or Ignore then exits
+the cold-check process. This works only for a logged-in Mac user, not while shut down
+or asleep. Checks never write to calendars before Accept.
+
+After building the app and enabling **Auto sync while the app is open**, install once:
+
+```bash
+./build_native_app.sh
+./scripts/install_background_check.sh
+```
+
+The script points to the absolute `build/TimeWeaver.app` path; keep this location
+stable or reinstall with a different app bundle path as argument. Cold-check intervals
+are 10 minutes independent of the in-app interval control. If TimeWeaver is already
+running, macOS reuses the existing app instead of creating a second instance.
+
+To turn off cold checks, disable Auto sync, or uninstall completely:
+
+```bash
+./scripts/uninstall_background_check.sh
+```
+
+Ignored batches are saved to `ignored-reviews.json`; open **Automation → Ignored Changes**
+and click **Review Again** to fetch a fresh preview, then choose Accept or Ignore.
+The saved snapshot is never directly executed.
 
 ## Build a DMG
 
