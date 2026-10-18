@@ -43,6 +43,26 @@ func localImageURL(from source: String) -> URL? {
     return url
 }
 
+/// Identity of the underlying workbook resource, used only to share one read within a single
+/// operation. Google links with the same document ID (any gid / query) are the same export.
+func workbookCacheKey(for source: String) -> String? {
+    let expanded = NSString(string: source).expandingTildeInPath
+    if FileManager.default.fileExists(atPath: expanded) {
+        return "file:" + URL(fileURLWithPath: expanded).standardizedFileURL.path
+    }
+    if source.contains("docs.google.com/spreadsheets") {
+        guard let match = googleSheetsIDRegex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+              let range = Range(match.range(at: 1), in: source) else {
+            return nil
+        }
+        return "gsheet:" + String(source[range])
+    }
+    if let url = URL(string: source), let scheme = url.scheme, scheme.hasPrefix("http") {
+        return "url:" + url.absoluteString
+    }
+    return nil
+}
+
 func downloadWorkbook(from source: String) async throws -> URL {
     let expanded = NSString(string: source).expandingTildeInPath
     if FileManager.default.fileExists(atPath: expanded) {
