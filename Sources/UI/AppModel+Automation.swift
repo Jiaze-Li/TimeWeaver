@@ -343,6 +343,29 @@ extension AppModel {
         checkAndReviewCalendarChanges(forceSyncKey: syncKey)
     }
 
+    func ignoreAutoReviewItem(syncKey: String) {
+        guard !ui.isBusy,
+              let review = ui.pendingAutoReview,
+              let item = review.items.first(where: { $0.syncKey == syncKey }) else { return }
+
+        var ignored = review
+        ignored.items = [item]
+        rememberIgnoredReview(ignored)
+
+        let remaining = review.items.filter { $0.syncKey != syncKey }
+        if remaining.isEmpty {
+            closeAutoReviewWindow()
+            invalidatePendingSyncPlan()
+            ui.status = "Auto sync changes ignored"
+        } else {
+            var updated = review
+            updated.items = remaining
+            updated.fingerprint = computeChangeFingerprint(for: remaining)
+            ui.pendingAutoReview = updated
+            ui.status = "Review remaining calendar changes"
+        }
+    }
+
     func ignoreAutoReview() {
         guard !ui.isBusy, let review = ui.pendingAutoReview else { return }
         rememberIgnoredReview(review)
