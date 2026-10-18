@@ -10,11 +10,19 @@ fi
 APP="$(cd "$APP" && pwd -P)"
 AGENT_ID="com.jiaze.timeweaver.background-check"
 PLIST="$HOME/Library/LaunchAgents/$AGENT_ID.plist"
-mkdir -p "$HOME/Library/LaunchAgents"
+CHECKER="$HOME/Library/Application Support/com.jiaze.timeweaver/background_check_tick.sh"
+mkdir -p "$HOME/Library/LaunchAgents" "$(dirname "$CHECKER")"
+
+# Use a stable installed copy so the repository may be moved after setup.
+cp "$ROOT/scripts/background_check_tick.sh" "$CHECKER"
+chmod 700 "$CHECKER"
 
 APP_XML="${APP//&/&amp;}"
 APP_XML="${APP_XML//</&lt;}"
 APP_XML="${APP_XML//>/&gt;}"
+CHECKER_XML="${CHECKER//&/&amp;}"
+CHECKER_XML="${CHECKER_XML//</&lt;}"
+CHECKER_XML="${CHECKER_XML//>/&gt;}"
 
 cat > "$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -24,15 +32,13 @@ cat > "$PLIST" <<EOF
     <key>Label</key><string>$AGENT_ID</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
-        <string>-g</string>
-        <string>-a</string>
+        <string>/bin/sh</string>
+        <string>$CHECKER_XML</string>
         <string>$APP_XML</string>
-        <string>--args</string>
-        <string>--background-check-once</string>
     </array>
     <key>RunAtLoad</key><true/>
-    <key>StartInterval</key><integer>600</integer>
+    <!-- The cheap gate runs every minute; the app opens only at the configured interval. -->
+    <key>StartInterval</key><integer>60</integer>
     <key>LimitLoadToSessionType</key><string>Aqua</string>
 </dict>
 </plist>
@@ -41,4 +47,5 @@ EOF
 plutil -lint "$PLIST"
 launchctl bootout "gui/$UID/$AGENT_ID" >/dev/null 2>&1 || true
 launchctl bootstrap "gui/$UID" "$PLIST"
-echo "Installed 10-minute cold checks for $APP"
+echo "Installed adaptive background checks for $APP"
+echo "TimeWeaver's saved Interval (minutes) now controls cold checks without reinstalling."

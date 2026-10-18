@@ -18,6 +18,12 @@ jobs:
       - name: Run unit & integration tests
         run: swift test
 
+      - name: Test adaptive background-check interval
+        run: |
+          zsh -n scripts/install_background_check.sh
+          zsh -n scripts/uninstall_background_check.sh
+          sh scripts/test_background_check_tick.sh
+
       - name: Build app bundle
         run: |
           chmod +x ./build_native_app.sh
