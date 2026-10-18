@@ -22,7 +22,7 @@ struct AutomationPaneView: View {
                     automationIntervalField
                 }
             }
-            Button("Ignored Changes (\(model.ignoredReviews.count))") {
+            Button("Ignored Changes (\(model.ignoredReviews.reduce(0) { $0 + $1.items.count }))") {
                 model.showIgnoredReviews = true
             }
             .disabled(model.ui.isBusy)
