@@ -102,7 +102,7 @@ struct PendingSyncConfirmation: Identifiable {
     var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 
-struct AutoReviewChangeItem: Identifiable, Equatable {
+struct AutoReviewChangeItem: Identifiable, Codable, Equatable {
     var id: String { "\(sourceName)|\(status)|\(title)|\(syncKey)" }
     var sourceName: String
     var calendarName: String
@@ -115,11 +115,22 @@ struct AutoReviewChangeItem: Identifiable, Equatable {
     var syncKey: String
 }
 
+/// A dismissed snapshot. Reopening it always requires a fresh preview.
+struct IgnoredAutoReview: Codable, Identifiable, Equatable {
+    // Legacy batch Ignore data is migrated to one record per reservation.
+    var id: String { items.first?.syncKey ?? fingerprint }
+    var fingerprint: String
+    var ignoredAt: Date
+    var items: [AutoReviewChangeItem]
+}
+
 struct PendingAutoReview: Identifiable {
     var id = UUID()
     var items: [AutoReviewChangeItem]
     var fingerprint: String
     var plan: SyncPlan
+    // The full preview is reverified before writing; visible items may omit ignores.
+    var allItems: [AutoReviewChangeItem] = []
     var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 
@@ -233,6 +244,8 @@ struct ExtractionResult {
     var workbookFingerprint: String?
     var averageConfidence: Double?
     var minimumConfidence: Double?
+    // Diagnostics only; never drives synchronization decisions.
+    var performanceTimings: [String: TimeInterval] = [:]
 }
 
 enum SourceRuntimeStatus: Equatable {

@@ -8,7 +8,7 @@ struct AutomationPaneView: View {
         VStack(alignment: .leading, spacing: 10) {
             PaneHeader(
                 title: "Automation",
-                subtitle: "Polling only runs while the app stays open. Closed apps do not sync."
+                subtitle: "Checks run while the app is open, or on login with the optional LaunchAgent."
             )
 
             ViewThatFits(in: .horizontal) {
@@ -22,7 +22,11 @@ struct AutomationPaneView: View {
                     automationIntervalField
                 }
             }
-            Text("The app can add, update, and remove previously synced events when the source changes. You can confirm every sync, or only ask before deletions.")
+            Button("Ignored Changes (\(model.ignoredReviews.reduce(0) { $0 + $1.items.count }))") {
+                model.showIgnoredReviews = true
+            }
+            .disabled(model.ui.isBusy)
+            Text("Automated checks only propose changes. Ignored Changes lets you reconsider dismissed proposals.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

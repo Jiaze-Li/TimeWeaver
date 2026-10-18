@@ -13,7 +13,8 @@ extension CalendarSyncEngine {
         previewOnly: Bool,
         aiApprovals: [AIApprovalRecord],
         eventOverrides: [String: EventOverride] = [:],
-        authorizedDeletionSourceIDs: Set<UUID> = []
+        authorizedDeletionSourceIDs: Set<UUID> = [],
+        approvedAutoReviewSyncKeys: Set<String>? = nil
     ) throws -> SourceSyncReport {
         guard let calendar = store.calendars(for: .event).first(where: { $0.title == source.calendar }) else {
             throw AppFailure.calendarNotFound(source.calendar)
@@ -37,6 +38,11 @@ extension CalendarSyncEngine {
         activeKeys.formUnion(activeLegacyKeys)
 
         for event in events {
+            // Keep every source key active for deletion safety, but do not write ignored bookings.
+            if !previewOnly, let approvedAutoReviewSyncKeys,
+               !approvedAutoReviewSyncKeys.contains(event.syncKey) {
+                continue
+            }
             let override = eventOverrides[event.syncKey]
             let resolvedTitle = override?.title ?? event.sourceName
             let resolvedStart = override?.start ?? event.start
@@ -209,6 +215,10 @@ extension CalendarSyncEngine {
 
         var deleteCandidates: [DeleteCandidate] = []
         for candidate in staleEntries {
+            if !previewOnly, let approvedAutoReviewSyncKeys,
+               !approvedAutoReviewSyncKeys.contains(candidate.syncKey) {
+                continue
+            }
             let start = parseFlexibleISO8601(candidate.startISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current)
             let end = parseFlexibleISO8601(candidate.endISO, timeZone: TimeZone(identifier: defaultSchedulingTimeZoneIdentifier) ?? .current)
 

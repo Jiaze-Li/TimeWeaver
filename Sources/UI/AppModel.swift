@@ -12,7 +12,10 @@ final class AppModel: ObservableObject {
     let launchAutomation = LaunchAutomation.load()
     var timer: Timer?
     var persistTask: Task<Void, Never>?
-    var dismissedChangeFingerprint: String?
+    @Published var ignoredReviews: [IgnoredAutoReview] = []
+    @Published var showIgnoredReviews = false
+    var isApplyingBackgroundReview = false
+    var isBackgroundCheckLaunch: Bool { BackgroundCheckLaunch.isRequested() }
     @Published var isCheckingAutomatically = false
     var autoReviewWindowController: NSWindowController?
 
@@ -88,10 +91,13 @@ final class AppModel: ObservableObject {
             schedulingTimeZoneIdentifier: settings.schedulingTimeZoneIdentifier
         )
 
+        ignoredReviews = SettingsStore.loadIgnoredReviews()
         reconcileSourceStatuses()
         prepareCalendarsOnLaunch()
         rescheduleTimer()
-        runLaunchAutomationIfNeeded()
+        if !isBackgroundCheckLaunch {
+            runLaunchAutomationIfNeeded()
+        }
     }
 
     deinit {

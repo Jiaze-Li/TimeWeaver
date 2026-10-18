@@ -34,7 +34,8 @@ extension AppModel {
     func runSync(
         previewOnly: Bool,
         authorizedDeletionSourceIDs: Set<UUID> = [],
-        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil,
+        approvedAutoReviewSyncKeys: Set<String>? = nil
     ) {
         if ui.isBusy { return }
         let enabledSources = ui.sources.filter(\.enabled)
@@ -63,6 +64,7 @@ extension AppModel {
         ui.pendingSyncPlan = nil
 
         Task {
+            var backgroundSyncFailure: String?
             do {
                 let result = try await performSync(
                     sources: enabledSources,
@@ -70,7 +72,8 @@ extension AppModel {
                     previewOnly: previewOnly,
                     cachedExtractions: cachedExtractions,
                     authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
-                    expectedAutoReviewItems: expectedAutoReviewItems
+                    expectedAutoReviewItems: expectedAutoReviewItems,
+                    approvedAutoReviewSyncKeys: approvedAutoReviewSyncKeys
                 )
                 if previewOnly {
                     ui.output = result.outputText
@@ -91,8 +94,15 @@ extension AppModel {
                     ui.pendingAIReviews = []
                 }
                 applySourceStatuses(from: result.reports)
+                let failedReports = result.reports.compactMap { report -> String? in
+                    guard let errorMessage = report.errorMessage else { return nil }
+                    return "\(report.sourceName): \(errorMessage)"
+                }
                 if previewOnly {
                     ui.status = "Preview complete"
+                } else if !failedReports.isEmpty {
+                    ui.status = "Sync completed with source errors"
+                    backgroundSyncFailure = failedReports.joined(separator: "\n")
                 } else {
                     ui.status = "Sync complete\nSync at \(syncTimestampString(syncStartedAt))"
                 }
@@ -104,8 +114,20 @@ extension AppModel {
                 }
                 clearLoadingStatuses()
                 ui.status = error.localizedDescription
+                backgroundSyncFailure = error.localizedDescription
             }
             ui.isBusy = false
+            if isBackgroundCheckLaunch && isApplyingBackgroundReview {
+                if let message = backgroundSyncFailure {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Calendar sync needs attention"
+                    alert.informativeText = "Some calendar changes may not have been applied. Please check before retrying.\n\n" + message
+                    alert.addButton(withTitle: "OK")
+                    alert.runModal()
+                }
+                NSApp.terminate(nil)
+            }
         }
     }
 

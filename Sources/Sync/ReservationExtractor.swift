@@ -42,9 +42,14 @@ struct ReservationExtractor {
             )
         }
 
+        let downloadStart = ProcessInfo.processInfo.systemUptime
         let workbookURL = try await downloadWorkbook(from: source.source)
+        let downloadSeconds = ProcessInfo.processInfo.systemUptime - downloadStart
+
         let isTemporary = !FileManager.default.fileExists(atPath: source.source)
+        let unzipStart = ProcessInfo.processInfo.systemUptime
         let package = try XLSXPackage(xlsxURL: workbookURL)
+        let unzipSeconds = ProcessInfo.processInfo.systemUptime - unzipStart
         defer {
             package.cleanup()
             if isTemporary {
@@ -52,6 +57,7 @@ struct ReservationExtractor {
             }
         }
 
+        let xmlStart = ProcessInfo.processInfo.systemUptime
         let workbookData = try package.data(at: "xl/workbook.xml")
         let relsData = try package.data(at: "xl/_rels/workbook.xml.rels")
         let sharedStringsData = (try? package.data(at: "xl/sharedStrings.xml")) ?? Data()
@@ -79,6 +85,8 @@ struct ReservationExtractor {
             )
         }
 
+        let xmlSeconds = ProcessInfo.processInfo.systemUptime - xmlStart
+        let rulesStart = ProcessInfo.processInfo.systemUptime
         let ruleOccurrences = try Self.extractRuleOccurrences(
             source: source,
             workdayHours: workdayHours,
@@ -87,6 +95,8 @@ struct ReservationExtractor {
             timeZone: timeZone
         )
 
+        let rulesSeconds = ProcessInfo.processInfo.systemUptime - rulesStart
+        let parserStart = ProcessInfo.processInfo.systemUptime
         let parserSelection = try await chooseOccurrences(
             source: source,
             workdayHours: workdayHours,
@@ -97,6 +107,8 @@ struct ReservationExtractor {
             timeZone: timeZone
         )
 
+        let parserSeconds = ProcessInfo.processInfo.systemUptime - parserStart
+        let mergeStart = ProcessInfo.processInfo.systemUptime
         var occurrences = parserSelection.occurrences
         let parserLabel = parserSelection.label
         let parserNotes = parserSelection.notes
@@ -109,7 +121,7 @@ struct ReservationExtractor {
         } else {
             filteredEvents = allEvents
         }
-        return ExtractionResult(
+        var extraction = ExtractionResult(
             allEvents: allEvents,
             filteredEvents: filteredEvents,
             filteredPastCount: max(allEvents.count - filteredEvents.count, 0),
@@ -120,6 +132,15 @@ struct ReservationExtractor {
             averageConfidence: parserSelection.averageConfidence,
             minimumConfidence: parserSelection.minimumConfidence
         )
+        extraction.performanceTimings = [
+            "download": downloadSeconds,
+            "unzip": unzipSeconds,
+            "xlsx": xmlSeconds,
+            "rules": rulesSeconds,
+            "parser": parserSeconds,
+            "merge": ProcessInfo.processInfo.systemUptime - mergeStart
+        ]
+        return extraction
     }
 
     private func extractImageSource(

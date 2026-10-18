@@ -139,7 +139,47 @@ private func applyAppPresentation(menuBarModeEnabled: Bool) {
     NSApp.setActivationPolicy(menuBarModeEnabled ? .accessory : .regular)
 }
 
+private final class TimeWeaverAppDelegate: NSObject, NSApplicationDelegate {
+    private var backgroundModel: AppModel?
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        guard BackgroundCheckLaunch.isRequested() else { return }
+        NSApp.setActivationPolicy(.accessory)
+        Task { @MainActor in
+            let model = AppModel()
+            self.backgroundModel = model
+            guard model.ui.autoSyncEnabled else {
+                NSApp.terminate(nil)
+                return
+            }
+            model.checkAndReviewCalendarChanges()
+        }
+    }
+}
+
+/// Choose the GUI or no-window entry point before SwiftUI creates scenes.
 @main
+enum TimeWeaverLauncher {
+    static func main() {
+        if BackgroundCheckLaunch.isRequested() {
+            BackgroundTimeWeaverApp.main()
+        } else {
+            TimeWeaverApp.main()
+        }
+    }
+}
+
+struct BackgroundTimeWeaverApp: App {
+    @NSApplicationDelegateAdaptor(TimeWeaverAppDelegate.self) private var delegate
+
+    var body: some Scene {
+        // A settings-only app creates no main window during a cold check.
+        Settings {
+            EmptyView()
+        }
+    }
+}
+
 struct TimeWeaverApp: App {
     @StateObject private var model = AppModel()
     @State private var menuBarExtraInserted = false

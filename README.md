@@ -31,7 +31,7 @@ TimeWeaver is no longer positioned as a PPMS-only utility. The product goal is:
 - Preview before sync
 - Sync confirmation with change counts
 - Optional confirmation before deleting removed events
-- Auto sync while the app is open
+- Auto review while the app is open, with optional scheduled cold checks when closed
 - Optional menu bar mode
 - Drag-and-drop image import with immediate preview/confirm flow
 - AI providers with presets:
@@ -67,6 +67,46 @@ This builds:
 ```
 
 For architecture details, synchronization workflow, and system constraints, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Optional scheduled background checks
+
+With the optional macOS **user LaunchAgent**, the same **Automation → Interval (minutes)**
+setting controls checks both while TimeWeaver is open and after it has quit (minimum 1 minute).
+A lightweight shell gate reads the saved settings every minute and only launches TimeWeaver
+when the selected interval has elapsed. It **does not** download or parse any sheets during
+intermediate ticks. Changing the interval or disabling Auto sync in the UI takes effect
+without reinstalling the LaunchAgent, once the setting has been saved.
+
+When nothing has changed, the app exits without opening its main window.
+When there are changes, the usual Review dialog appears; Accept or Ignore then exits
+the cold-check process. Checks never write to calendars before Accept.
+
+After building the app and enabling **Auto sync while the app is open**, install once:
+
+```bash
+./build_native_app.sh
+./scripts/install_background_check.sh
+```
+
+If you use an app outside the build folder (for example, your Desktop copy), pass
+its absolute path as the first argument to the install script. Keep the app path stable,
+or rerun the installer if it moves. **If upgrading from the old fixed 10-minute
+LaunchAgent, rerun the installer once** to replace its launchd configuration. Future
+interval changes only require editing the TimeWeaver setting.
+
+The Mac must be awake with the user logged in. launchd is not a precise scheduler:
+checks may be delayed around the minute boundary or after sleep. If TimeWeaver is
+already running, macOS reuses the existing app and its in-app timer handles checking.
+
+To turn off cold checks, disable Auto sync, or uninstall completely:
+
+```bash
+./scripts/uninstall_background_check.sh
+```
+
+Ignored batches are saved to `ignored-reviews.json`; open **Automation → Ignored Changes**
+and click **Review Again** to fetch a fresh preview, then choose Accept or Ignore.
+The saved snapshot is never directly executed.
 
 ## Build a DMG
 

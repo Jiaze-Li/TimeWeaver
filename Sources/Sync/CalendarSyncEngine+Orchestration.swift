@@ -14,9 +14,18 @@ extension CalendarSyncEngine {
         eventOverrides: [String: EventOverride] = [:],
         cachedExtractions: [UUID: ExtractionResult] = [:],
         authorizedDeletionSourceIDs: Set<UUID> = [],
-        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil,
+        approvedAutoReviewSyncKeys: Set<String>? = nil
     ) async throws -> SyncRunResult {
+        let syncStart = ProcessInfo.processInfo.systemUptime
         try await ensureAccess()
+        if let approvedAutoReviewSyncKeys {
+            guard !previewOnly, let expectedAutoReviewItems,
+                  !approvedAutoReviewSyncKeys.isEmpty,
+                  approvedAutoReviewSyncKeys.isSubset(of: Set(expectedAutoReviewItems.map(\.syncKey))) else {
+                throw AppFailure.syncFailed("Invalid approved booking selection. No changes were applied.")
+            }
+        }
 
         // Auto-review approval authorizes only the changes the user actually saw.
         // Verify every proposed mutation before the first calendar write.
@@ -50,7 +59,10 @@ extension CalendarSyncEngine {
         var extractions: [UUID: ExtractionResult] = cachedExtractions
 
         for source in sources where source.enabled {
+            let sourceStart = ProcessInfo.processInfo.systemUptime
             do {
+                let extractionStart = ProcessInfo.processInfo.systemUptime
+                let reusedExtraction = cachedExtractions[source.id] != nil
                 let extraction: ExtractionResult
                 if let cached = cachedExtractions[source.id] {
                     extraction = cached
@@ -70,6 +82,8 @@ extension CalendarSyncEngine {
                     )
                     extractions[source.id] = extraction
                 }
+                let extractionSeconds = ProcessInfo.processInfo.systemUptime - extractionStart
+                let calendarStart = ProcessInfo.processInfo.systemUptime
                 let report = try syncSource(
                     source: source,
                     extraction: extraction,
@@ -78,8 +92,11 @@ extension CalendarSyncEngine {
                     previewOnly: previewOnly,
                     aiApprovals: aiApprovals,
                     eventOverrides: eventOverrides,
-                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
+                    approvedAutoReviewSyncKeys: approvedAutoReviewSyncKeys
                 )
+                let calendarSeconds = ProcessInfo.processInfo.systemUptime - calendarStart
+                let sourceSeconds = ProcessInfo.processInfo.systemUptime - sourceStart
                 reports.append(report)
 
                 lines.append("Source: \(report.sourceName)")
@@ -87,6 +104,16 @@ extension CalendarSyncEngine {
                     lines.append("Approval is required before this source can sync automatically.")
                 }
                 lines.append("Found \(report.totalMatchedCount) matching \(report.totalMatchedCount == 1 ? "booking" : "bookings").")
+                let formatSeconds: (TimeInterval) -> String = { String(format: "%.2fs", $0) }
+                lines.append("Timing: total \(formatSeconds(sourceSeconds)), extraction \(formatSeconds(extractionSeconds)) \(reusedExtraction ? "(cached)" : "(fresh)"), calendar compare/write \(formatSeconds(calendarSeconds)), parser \(report.parserLabel)")
+                if !reusedExtraction && !extraction.performanceTimings.isEmpty {
+                    let timingOrder = ["download", "unzip", "xlsx", "rules", "parser", "merge"]
+                    let stages = timingOrder.compactMap { key -> String? in
+                        guard let seconds = extraction.performanceTimings[key] else { return nil }
+                        return "\(key) \(formatSeconds(seconds))"
+                    }
+                    lines.append("  Stages: \(stages.joined(separator: " | "))")
+                }
 
                 let createStatus = previewOnly ? "would create" : "created"
                 let updateStatus = previewOnly ? "would update" : "updated"
@@ -149,10 +176,12 @@ extension CalendarSyncEngine {
                 lines.append("Source: \(source.name)")
                 lines.append("Could not complete sync for this source.")
                 lines.append("Reason: \(message)")
+                lines.append("Timing: failed after \(String(format: "%.2fs", ProcessInfo.processInfo.systemUptime - sourceStart))")
                 lines.append("")
             }
         }
 
+        lines.append("Timing overall: \(String(format: "%.2fs", ProcessInfo.processInfo.systemUptime - syncStart))")
         if !previewOnly {
             stateStore.saveState(state)
         }

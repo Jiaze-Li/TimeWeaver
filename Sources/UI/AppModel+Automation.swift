@@ -7,7 +7,7 @@ extension AppModel {
     func rescheduleTimer() {
         timer?.invalidate()
         timer = nil
-        guard ui.autoSyncEnabled else { return }
+        guard ui.autoSyncEnabled && !isBackgroundCheckLaunch else { return }
         let minutes = max(Int(ui.autoSyncMinutes) ?? defaultAutoSyncMinutes, 1)
         timer = Timer.scheduledTimer(withTimeInterval: Double(minutes * 60), repeats: true) { [weak self] _ in
             guard let self else { return }
@@ -153,11 +153,12 @@ extension AppModel {
         checkAndReviewCalendarChanges()
     }
 
-    func checkAndReviewCalendarChanges() {
+    func checkAndReviewCalendarChanges(forceSyncKey: String? = nil) {
         if ui.isBusy || ui.pendingAutoReview != nil { return }
         let enabledSources = ui.sources.filter(\.enabled)
         guard !enabledSources.isEmpty else {
             ui.status = "Enable at least one source first"
+            if isBackgroundCheckLaunch { NSApp.terminate(nil) }
             return
         }
 
@@ -170,6 +171,9 @@ extension AppModel {
             defer {
                 ui.isBusy = false
                 isCheckingAutomatically = false
+                if isBackgroundCheckLaunch && ui.pendingAutoReview == nil {
+                    NSApp.terminate(nil)
+                }
             }
             do {
                 let result = try await performSync(
@@ -191,19 +195,18 @@ extension AppModel {
                     return
                 }
 
-                let items = buildAutoReviewChangeItems(from: result.reports)
+                let allItems = buildAutoReviewChangeItems(from: result.reports)
+                let items = pendingAutoReviewItems(
+                    from: allItems, ignoredRecords: ignoredReviews, forceSyncKey: forceSyncKey
+                )
                 if items.isEmpty {
-                    ui.status = "Auto sync checked: no changes"
+                    ui.status = forceSyncKey == nil
+                        ? "Auto sync checked: no new changes"
+                        : "Selected reservation has no pending changes"
                     return
                 }
 
                 let fingerprint = computeChangeFingerprint(for: items)
-                if fingerprint == dismissedChangeFingerprint || fingerprint == ui.pendingAutoReview?.fingerprint {
-                    ui.status = "Auto sync checked: proposed changes already reviewed and dismissed"
-                    return
-                }
-
-
                 let suspiciousReports = result.reports.filter(\.isSuspiciousDeletion)
                 let authorizedIDs = Set(suspiciousReports.map(\.sourceItemID))
                 let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
@@ -220,6 +223,7 @@ extension AppModel {
                     items: items,
                     fingerprint: fingerprint,
                     plan: plan,
+                    allItems: allItems,
                     authorizedDeletionSourceIDs: authorizedIDs
                 )
 
@@ -242,21 +246,7 @@ extension AppModel {
 
 
     func computeChangeFingerprint(for items: [AutoReviewChangeItem]) -> String {
-        TimeWeaverCore.computeChangeFingerprint(
-            items: items.map { item in
-                (
-                    sourceName: item.sourceName,
-                    calendarName: item.calendarName,
-                    status: item.status,
-                    title: item.title,
-                    oldStartTimestamp: item.oldStart?.timeIntervalSince1970 ?? 0,
-                    oldEndTimestamp: item.oldEnd?.timeIntervalSince1970 ?? 0,
-                    newStartTimestamp: item.newStart?.timeIntervalSince1970 ?? 0,
-                    newEndTimestamp: item.newEnd?.timeIntervalSince1970 ?? 0,
-                    syncKey: item.syncKey
-                )
-            }
-        )
+        autoReviewFingerprint(for: items)
     }
 
     func presentAutoReview(_ review: PendingAutoReview) {
@@ -291,6 +281,9 @@ extension AppModel {
             window.contentViewController = NSHostingController(rootView: contentView)
         }
 
+        if isBackgroundCheckLaunch {
+            NSApp.setActivationPolicy(.regular)
+        }
         autoReviewWindowController?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -303,27 +296,88 @@ extension AppModel {
         let workdayHours = "\(ui.workdayStart)-\(ui.workdayEnd)"
         guard ui.pendingSyncPlan?.id == review.plan.id,
               review.plan.isValid(for: enabledSources, upcomingOnly: ui.upcomingOnly, workdayHours: workdayHours) else {
+            isApplyingBackgroundReview = isBackgroundCheckLaunch
             closeAutoReviewWindow()
+            isApplyingBackgroundReview = false
             invalidatePendingSyncPlan()
             ui.status = "Review outdated. Checking current changes again..."
             checkAndReviewCalendarChanges()
             return
         }
 
+        isApplyingBackgroundReview = isBackgroundCheckLaunch
+        // Only approved, visible reservations may mutate the calendar.
+        let approvedKeys = Set(review.items.map(\.syncKey))
+        ignoredReviews.removeAll { record in
+            record.items.first.map { approvedKeys.contains($0.syncKey) } ?? false
+        }
+        SettingsStore.saveIgnoredReviews(ignoredReviews)
         closeAutoReviewWindow()
-        dismissedChangeFingerprint = nil
         ui.pendingSyncPlan = review.plan
         runSync(
             previewOnly: false,
             authorizedDeletionSourceIDs: review.authorizedDeletionSourceIDs,
-            expectedAutoReviewItems: review.items
+            expectedAutoReviewItems: review.allItems.isEmpty ? review.items : review.allItems,
+            approvedAutoReviewSyncKeys: approvedKeys
         )
     }
 
+    private func rememberIgnoredReview(_ review: PendingAutoReview) {
+        let now = Date()
+        let newRecords = review.items.map { item in
+            IgnoredAutoReview(
+                fingerprint: autoReviewItemFingerprint(item),
+                ignoredAt: now,
+                items: [item]
+            )
+        }
+        // A modified reservation replaces its old ignore state instead of adding a copy.
+        ignoredReviews = normalizedIgnoredReviews(newRecords + ignoredReviews)
+        SettingsStore.saveIgnoredReviews(ignoredReviews)
+    }
+
+    func revisitIgnoredReview(_ record: IgnoredAutoReview) {
+        guard !ui.isBusy && ui.pendingAutoReview == nil,
+              let syncKey = record.items.first?.syncKey else { return }
+        showIgnoredReviews = false
+        checkAndReviewCalendarChanges(forceSyncKey: syncKey)
+    }
+
+    func unignoreAutoReview(_ record: IgnoredAutoReview) {
+        guard !ui.isBusy, ui.pendingAutoReview == nil,
+              let syncKey = record.items.first?.syncKey,
+              ignoredReviews.contains(where: { $0.items.first?.syncKey == syncKey }) else { return }
+        ignoredReviews = ignoredReviewsRemoving(syncKey: syncKey, from: ignoredReviews)
+        SettingsStore.saveIgnoredReviews(ignoredReviews)
+        ui.status = "Reservation unignored; the next automatic check can notify you again"
+    }
+
+    func ignoreAutoReviewItem(syncKey: String) {
+        guard !ui.isBusy,
+              let review = ui.pendingAutoReview,
+              let item = review.items.first(where: { $0.syncKey == syncKey }) else { return }
+
+        var ignored = review
+        ignored.items = [item]
+        rememberIgnoredReview(ignored)
+
+        let remaining = review.items.filter { $0.syncKey != syncKey }
+        if remaining.isEmpty {
+            closeAutoReviewWindow()
+            invalidatePendingSyncPlan()
+            ui.status = "Auto sync changes ignored"
+        } else {
+            var updated = review
+            updated.items = remaining
+            updated.fingerprint = computeChangeFingerprint(for: remaining)
+            ui.pendingAutoReview = updated
+            ui.status = "Review remaining calendar changes"
+        }
+    }
 
     func ignoreAutoReview() {
-        guard let review = ui.pendingAutoReview else { return }
-        dismissedChangeFingerprint = review.fingerprint
+        guard !ui.isBusy, let review = ui.pendingAutoReview else { return }
+        rememberIgnoredReview(review)
         closeAutoReviewWindow()
         invalidatePendingSyncPlan()
         ui.status = "Auto sync changes ignored"
@@ -331,10 +385,13 @@ extension AppModel {
 
     func handleAutoReviewWindowClosed() {
         if let review = ui.pendingAutoReview {
-            dismissedChangeFingerprint = review.fingerprint
+            rememberIgnoredReview(review)
             ui.pendingAutoReview = nil
             invalidatePendingSyncPlan()
             ui.status = "Auto sync changes ignored"
+        }
+        if isBackgroundCheckLaunch && !isApplyingBackgroundReview {
+            NSApp.terminate(nil)
         }
     }
 

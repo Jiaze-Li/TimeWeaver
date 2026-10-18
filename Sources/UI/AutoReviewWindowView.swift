@@ -11,8 +11,17 @@ struct AutoReviewWindowView: View {
             Divider()
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(review.items) { item in
-                        AutoReviewItemRow(item: item)
+                    ForEach(model.ui.pendingAutoReview?.items ?? review.items) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            AutoReviewItemRow(item: item)
+                            Button("Ignore") {
+                                model.ignoreAutoReviewItem(syncKey: item.syncKey)
+                            }
+                            .font(.caption)
+                            .disabled(model.ui.isBusy)
+                            .padding(.top, 5)
+                            .padding(.trailing, 12)
+                        }
                         Divider()
                             .padding(.leading, 38)
                     }
@@ -30,7 +39,7 @@ struct AutoReviewWindowView: View {
             Text("Review Calendar Changes")
                 .font(.headline)
             HStack(spacing: 6) {
-                Text("\(review.items.count) proposed \(review.items.count == 1 ? "change" : "changes")")
+                Text("\(model.ui.pendingAutoReview?.items.count ?? review.items.count) proposed changes")
                     .foregroundStyle(.secondary)
                 if !review.authorizedDeletionSourceIDs.isEmpty {
                     Text("·")
@@ -54,8 +63,7 @@ struct AutoReviewWindowView: View {
                     .foregroundStyle(.orange)
             }
             Spacer(minLength: 0)
-            Button("Ignore") {
-
+            Button("Ignore All") {
                 model.ignoreAutoReview()
             }
             .keyboardShortcut(.cancelAction)
@@ -74,7 +82,7 @@ struct AutoReviewWindowView: View {
     }
 }
 
-private struct AutoReviewItemRow: View {
+struct AutoReviewItemRow: View {
     let item: AutoReviewChangeItem
 
     var body: some View {

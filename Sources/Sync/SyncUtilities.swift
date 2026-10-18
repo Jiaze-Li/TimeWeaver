@@ -124,3 +124,68 @@ func buildAutoReviewItems(from reports: [SourceSyncReport], existingState: SyncS
     return items
 }
 
+
+/// syncKey is the reservation identity; fingerprint describes the current proposal.
+func autoReviewFingerprint(for items: [AutoReviewChangeItem]) -> String {
+    TimeWeaverCore.computeChangeFingerprint(
+        items: items.map { item in
+            (
+                sourceName: item.sourceName,
+                calendarName: item.calendarName,
+                status: item.status,
+                title: item.title,
+                oldStartTimestamp: item.oldStart?.timeIntervalSince1970 ?? 0,
+                oldEndTimestamp: item.oldEnd?.timeIntervalSince1970 ?? 0,
+                newStartTimestamp: item.newStart?.timeIntervalSince1970 ?? 0,
+                newEndTimestamp: item.newEnd?.timeIntervalSince1970 ?? 0,
+                syncKey: item.syncKey
+            )
+        }
+    )
+}
+func autoReviewItemFingerprint(_ item: AutoReviewChangeItem) -> String {
+    autoReviewFingerprint(for: [item])
+}
+
+/// Migrates old batch Ignore entries, merging repeated bookings by syncKey.
+/// The most recently ignored calendar/time/status wins without duplicating the booking.
+func normalizedIgnoredReviews(_ records: [IgnoredAutoReview]) -> [IgnoredAutoReview] {
+    var latest: [String: IgnoredAutoReview] = [:]
+    for record in records {
+        for item in record.items {
+            if let existing = latest[item.syncKey], existing.ignoredAt >= record.ignoredAt {
+                continue
+            }
+            latest[item.syncKey] = IgnoredAutoReview(
+                fingerprint: autoReviewItemFingerprint(item),
+                ignoredAt: record.ignoredAt,
+                items: [item]
+            )
+        }
+    }
+    return latest.values.sorted {
+        if $0.ignoredAt != $1.ignoredAt { return $0.ignoredAt > $1.ignoredAt }
+        return $0.id < $1.id
+    }
+}
+
+/// Suppress only identical ignored appointments; changes to other appointments
+/// do not re-prompt unchanged ones. Review Again targets just one reservation.
+func pendingAutoReviewItems(
+    from allItems: [AutoReviewChangeItem],
+    ignoredRecords: [IgnoredAutoReview],
+    forceSyncKey: String? = nil
+) -> [AutoReviewChangeItem] {
+    let ignored = Dictionary(uniqueKeysWithValues: normalizedIgnoredReviews(ignoredRecords).compactMap { record in
+        record.items.first.map { ($0.syncKey, record.fingerprint) }
+    })
+    return allItems.filter { item in
+        if let forceSyncKey { return item.syncKey == forceSyncKey }
+        return ignored[item.syncKey] != autoReviewItemFingerprint(item)
+    }
+}
+
+/// Remove exactly one ignored reservation; other ignored bookings remain suppressed.
+func ignoredReviewsRemoving(syncKey: String, from records: [IgnoredAutoReview]) -> [IgnoredAutoReview] {
+    normalizedIgnoredReviews(records).filter { $0.items.first?.syncKey != syncKey }
+}
