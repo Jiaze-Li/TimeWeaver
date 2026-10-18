@@ -668,4 +668,41 @@ final class AutoCheckAndReviewTests: XCTestCase {
         XCTAssertEqual(fixture.calendar.storedEvents.count, 2)
         XCTAssertNotNil(fixture.state.loadState().events["keep-ignored"])
     }
+
+    func testUnignoreOnlyRestoresSelectedBookingToFutureAutoCheck() throws {
+        let first = AutoReviewChangeItem(
+            sourceName: "ppms1", calendarName: "Experiment", status: "would create",
+            title: "First booking", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 22, hour: 9), newEnd: makeDate(day: 22, hour: 10),
+            syncKey: "first"
+        )
+        let second = AutoReviewChangeItem(
+            sourceName: "zqh", calendarName: "Experiment", status: "would create",
+            title: "Second booking", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 23, hour: 9), newEnd: makeDate(day: 23, hour: 10),
+            syncKey: "second"
+        )
+        let ignored = normalizedIgnoredReviews([
+            IgnoredAutoReview(
+                fingerprint: autoReviewItemFingerprint(first), ignoredAt: Date(),
+                items: [first]
+            ),
+            IgnoredAutoReview(
+                fingerprint: autoReviewItemFingerprint(second), ignoredAt: Date(),
+                items: [second]
+            )
+        ])
+        XCTAssertTrue(pendingAutoReviewItems(from: [first, second], ignoredRecords: ignored).isEmpty)
+
+        let remaining = ignoredReviewsRemoving(syncKey: first.syncKey, from: ignored)
+        XCTAssertEqual(remaining.map(\.id), ["second"])
+        XCTAssertEqual(pendingAutoReviewItems(from: [first, second], ignoredRecords: remaining), [first])
+
+        // The new suppression state is durable and remains correct across relaunches.
+        let persisted = try JSONDecoder().decode(
+            [IgnoredAutoReview].self, from: JSONEncoder().encode(remaining)
+        )
+        XCTAssertEqual(pendingAutoReviewItems(from: [first, second], ignoredRecords: persisted), [first])
+        XCTAssertEqual(ignoredReviewsRemoving(syncKey: "missing", from: remaining), remaining)
+    }
 }

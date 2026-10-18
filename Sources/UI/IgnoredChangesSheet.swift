@@ -9,7 +9,7 @@ struct IgnoredChangesSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Ignored Changes").font(.title3).bold()
-                    Text("Dismissed changes are saved. Review Again always reads the current calendar first.")
+                    Text("Review Again checks the latest calendar. Unignore allows the next automatic check to notify you again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -38,7 +38,10 @@ struct IgnoredChangesSheet: View {
                                     Button("Review Again") {
                                         model.revisitIgnoredReview(record)
                                     }
-                                    .disabled(model.ui.isBusy)
+                                    Button("Unignore") {
+                                        model.unignoreAutoReview(record)
+                                    }
+                                    .disabled(model.ui.isBusy || model.ui.pendingAutoReview != nil)
                                 }
                                 ForEach(record.items) { item in
                                     AutoReviewItemRow(item: item)

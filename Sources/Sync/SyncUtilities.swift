@@ -184,3 +184,8 @@ func pendingAutoReviewItems(
         return ignored[item.syncKey] != autoReviewItemFingerprint(item)
     }
 }
+
+/// Remove exactly one ignored reservation; other ignored bookings remain suppressed.
+func ignoredReviewsRemoving(syncKey: String, from records: [IgnoredAutoReview]) -> [IgnoredAutoReview] {
+    normalizedIgnoredReviews(records).filter { $0.items.first?.syncKey != syncKey }
+}

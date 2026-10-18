@@ -343,6 +343,15 @@ extension AppModel {
         checkAndReviewCalendarChanges(forceSyncKey: syncKey)
     }
 
+    func unignoreAutoReview(_ record: IgnoredAutoReview) {
+        guard !ui.isBusy, ui.pendingAutoReview == nil,
+              let syncKey = record.items.first?.syncKey,
+              ignoredReviews.contains(where: { $0.items.first?.syncKey == syncKey }) else { return }
+        ignoredReviews = ignoredReviewsRemoving(syncKey: syncKey, from: ignoredReviews)
+        SettingsStore.saveIgnoredReviews(ignoredReviews)
+        ui.status = "Reservation unignored; the next automatic check can notify you again"
+    }
+
     func ignoreAutoReviewItem(syncKey: String) {
         guard !ui.isBusy,
               let review = ui.pendingAutoReview,
