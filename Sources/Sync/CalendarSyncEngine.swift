@@ -6,17 +6,20 @@ actor CalendarSyncEngine {
     let stateStore: SyncStateStoreProtocol
     let aiNormalizer: AIWorkbookNormalizerProtocol
     let localImageParser: LocalImageParserProtocol
+    let workbookDownloader: WorkbookDownloader
 
     init(
         store: CalendarStoreProtocol = EKEventStore(),
         stateStore: SyncStateStoreProtocol = DefaultSyncStateStore(),
         aiNormalizer: AIWorkbookNormalizerProtocol = DefaultAIWorkbookNormalizer(),
-        localImageParser: LocalImageParserProtocol = DefaultLocalImageParser()
+        localImageParser: LocalImageParserProtocol = DefaultLocalImageParser(),
+        workbookDownloader: @escaping WorkbookDownloader = { try await downloadWorkbook(from: $0) }
     ) {
         self.store = store
         self.stateStore = stateStore
         self.aiNormalizer = aiNormalizer
         self.localImageParser = localImageParser
+        self.workbookDownloader = workbookDownloader
     }
 
     func calendarAccessState() -> CalendarAccessState {

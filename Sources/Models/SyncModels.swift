@@ -246,6 +246,7 @@ struct ExtractionResult {
     var minimumConfidence: Double?
     // Diagnostics only; never drives synchronization decisions.
     var performanceTimings: [String: TimeInterval] = [:]
+    var workbookReused: Bool = false
 }
 
 enum SourceRuntimeStatus: Equatable {

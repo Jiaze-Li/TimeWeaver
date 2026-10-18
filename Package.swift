@@ -64,6 +64,7 @@ let package = Package(
                 "Sync/CalendarSyncEngine+Mutation.swift",
                 "Sync/CalendarSyncEngine+Orchestration.swift",
                 "Sync/ReservationExtractor.swift",
+                "Sync/WorkbookSession.swift",
                 "Parsers/SourceIOUtilities.swift",
                 "Parsers/DateTimeParsingUtilities.swift",
                 "Parsers/XLSXPackage.swift",

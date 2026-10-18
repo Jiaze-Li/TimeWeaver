@@ -57,6 +57,9 @@ extension CalendarSyncEngine {
         var reports: [SourceSyncReport] = []
         var lines: [String] = []
         var extractions: [UUID: ExtractionResult] = cachedExtractions
+        // One read per distinct workbook for this operation only; discarded when sync() returns.
+        let workbookSession = WorkbookSession(download: workbookDownloader)
+        var calendarCompareSeconds: TimeInterval = 0
 
         for source in sources where source.enabled {
             let sourceStart = ProcessInfo.processInfo.systemUptime
@@ -78,6 +81,7 @@ extension CalendarSyncEngine {
                         parserMode: parserMode,
                         aiConfiguration: aiConfiguration,
                         timeZone: schedulingTimeZone,
+                        workbooks: workbookSession,
                         referenceDate: referenceDate
                     )
                     extractions[source.id] = extraction
@@ -96,6 +100,7 @@ extension CalendarSyncEngine {
                     approvedAutoReviewSyncKeys: approvedAutoReviewSyncKeys
                 )
                 let calendarSeconds = ProcessInfo.processInfo.systemUptime - calendarStart
+                calendarCompareSeconds += calendarSeconds
                 let sourceSeconds = ProcessInfo.processInfo.systemUptime - sourceStart
                 reports.append(report)
 
@@ -107,12 +112,13 @@ extension CalendarSyncEngine {
                 let formatSeconds: (TimeInterval) -> String = { String(format: "%.2fs", $0) }
                 lines.append("Timing: total \(formatSeconds(sourceSeconds)), extraction \(formatSeconds(extractionSeconds)) \(reusedExtraction ? "(cached)" : "(fresh)"), calendar compare/write \(formatSeconds(calendarSeconds)), parser \(report.parserLabel)")
                 if !reusedExtraction && !extraction.performanceTimings.isEmpty {
-                    let timingOrder = ["download", "unzip", "xlsx", "rules", "parser", "merge"]
+                    let timingOrder = ["download", "unzip", "sharedStrings", "worksheets", "rules", "parser", "merge"]
                     let stages = timingOrder.compactMap { key -> String? in
                         guard let seconds = extraction.performanceTimings[key] else { return nil }
                         return "\(key) \(formatSeconds(seconds))"
                     }
-                    lines.append("  Stages: \(stages.joined(separator: " | "))")
+                    let workbookNote = extraction.workbookReused ? "workbook reused from earlier source | " : ""
+                    lines.append("  Stages: \(workbookNote)\(stages.joined(separator: " | "))")
                 }
 
                 let createStatus = previewOnly ? "would create" : "created"
@@ -181,6 +187,14 @@ extension CalendarSyncEngine {
             }
         }
 
+        let workbookSummary = await workbookSession.summary()
+        if workbookSummary.distinctWorkbooks > 0 {
+            let fmt: (TimeInterval) -> String = { String(format: "%.2fs", $0) }
+            let t = workbookSummary.timings
+            lines.append("Workbooks: \(workbookSummary.distinctWorkbooks) read (\(workbookSummary.downloads) downloaded, \(workbookSummary.parses) parsed), \(workbookSummary.reusedReads) reused")
+            lines.append("Workbook time (counted once): download \(fmt(t.download)) | unzip \(fmt(t.unzip)) | sharedStrings \(fmt(t.sharedStrings)) | worksheets \(fmt(t.worksheets))")
+        }
+        lines.append("Calendar compare/write total: \(String(format: "%.2fs", calendarCompareSeconds))")
         lines.append("Timing overall: \(String(format: "%.2fs", ProcessInfo.processInfo.systemUptime - syncStart))")
         if !previewOnly {
             stateStore.saveState(state)

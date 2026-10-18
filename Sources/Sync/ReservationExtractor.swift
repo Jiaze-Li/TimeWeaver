@@ -27,6 +27,7 @@ struct ReservationExtractor {
         parserMode: ParserMode,
         aiConfiguration: AIServiceConfiguration?,
         timeZone: TimeZone,
+        workbooks: WorkbookSession,
         referenceDate: Date = Date()
     ) async throws -> ExtractionResult {
         if let imageURL = localImageURL(from: source.source) {
@@ -42,50 +43,10 @@ struct ReservationExtractor {
             )
         }
 
-        let downloadStart = ProcessInfo.processInfo.systemUptime
-        let workbookURL = try await downloadWorkbook(from: source.source)
-        let downloadSeconds = ProcessInfo.processInfo.systemUptime - downloadStart
-
-        let isTemporary = !FileManager.default.fileExists(atPath: source.source)
-        let unzipStart = ProcessInfo.processInfo.systemUptime
-        let package = try XLSXPackage(xlsxURL: workbookURL)
-        let unzipSeconds = ProcessInfo.processInfo.systemUptime - unzipStart
-        defer {
-            package.cleanup()
-            if isTemporary {
-                try? FileManager.default.removeItem(at: workbookURL)
-            }
-        }
-
-        let xmlStart = ProcessInfo.processInfo.systemUptime
-        let workbookData = try package.data(at: "xl/workbook.xml")
-        let relsData = try package.data(at: "xl/_rels/workbook.xml.rels")
-        let sharedStringsData = (try? package.data(at: "xl/sharedStrings.xml")) ?? Data()
-
-        let workbookSheets = WorkbookParser().parse(data: workbookData)
-        let relationships = RelationshipParser().parse(data: relsData)
-        let sharedStrings = SharedStringsParser().parse(data: sharedStringsData)
-
+        let (workbook, workbookReused) = try await workbooks.load(source: source.source)
+        let parsedSheets = workbook.sheets
         let calendar = Calendar(identifier: .gregorian)
 
-        var parsedSheets: [ParsedWorkbookSheet] = []
-        for sheet in workbookSheets {
-            guard let target = relationships[sheet.relationshipID] else { continue }
-            let sheetData = try package.data(at: normalizeWorkbookPath(target))
-            let worksheet = WorksheetParser(sharedStrings: sharedStrings).parse(data: sheetData)
-            if worksheet.maxRow == 0 { continue }
-            let parsedMonth = parseMonthSheet(sheet.name)
-            parsedSheets.append(
-                ParsedWorkbookSheet(
-                    name: sheet.name,
-                    year: parsedMonth?.0,
-                    month: parsedMonth?.1,
-                    worksheet: worksheet
-                )
-            )
-        }
-
-        let xmlSeconds = ProcessInfo.processInfo.systemUptime - xmlStart
         let rulesStart = ProcessInfo.processInfo.systemUptime
         let ruleOccurrences = try Self.extractRuleOccurrences(
             source: source,
@@ -132,14 +93,18 @@ struct ReservationExtractor {
             averageConfidence: parserSelection.averageConfidence,
             minimumConfidence: parserSelection.minimumConfidence
         )
+        extraction.workbookReused = workbookReused
         extraction.performanceTimings = [
-            "download": downloadSeconds,
-            "unzip": unzipSeconds,
-            "xlsx": xmlSeconds,
             "rules": rulesSeconds,
             "parser": parserSeconds,
             "merge": ProcessInfo.processInfo.systemUptime - mergeStart
         ]
+        if !workbookReused {
+            extraction.performanceTimings["download"] = workbook.timings.download
+            extraction.performanceTimings["unzip"] = workbook.timings.unzip
+            extraction.performanceTimings["sharedStrings"] = workbook.timings.sharedStrings
+            extraction.performanceTimings["worksheets"] = workbook.timings.worksheets
+        }
         return extraction
     }
 
