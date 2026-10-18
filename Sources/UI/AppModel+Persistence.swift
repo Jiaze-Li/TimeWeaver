@@ -107,7 +107,8 @@ extension AppModel {
         eventOverrides: [String: EventOverride] = [:],
         cachedExtractions: [UUID: ExtractionResult] = [:],
         authorizedDeletionSourceIDs: Set<UUID> = [],
-        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil,
+        approvedAutoReviewSyncKeys: Set<String>? = nil
     ) async throws -> SyncRunResult {
         try await calendarSyncEngine.sync(
             sources: sources,
@@ -121,7 +122,8 @@ extension AppModel {
             eventOverrides: eventOverrides,
             cachedExtractions: cachedExtractions,
             authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
-            expectedAutoReviewItems: expectedAutoReviewItems
+            expectedAutoReviewItems: expectedAutoReviewItems,
+            approvedAutoReviewSyncKeys: approvedAutoReviewSyncKeys
         )
     }
 

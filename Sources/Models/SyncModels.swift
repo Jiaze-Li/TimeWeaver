@@ -117,7 +117,8 @@ struct AutoReviewChangeItem: Identifiable, Codable, Equatable {
 
 /// A dismissed snapshot. Reopening it always requires a fresh preview.
 struct IgnoredAutoReview: Codable, Identifiable, Equatable {
-    var id: String { fingerprint }
+    // Legacy batch Ignore data is migrated to one record per reservation.
+    var id: String { items.first?.syncKey ?? fingerprint }
     var fingerprint: String
     var ignoredAt: Date
     var items: [AutoReviewChangeItem]
@@ -128,6 +129,8 @@ struct PendingAutoReview: Identifiable {
     var items: [AutoReviewChangeItem]
     var fingerprint: String
     var plan: SyncPlan
+    // The full preview is reverified before writing; visible items may omit ignores.
+    var allItems: [AutoReviewChangeItem] = []
     var authorizedDeletionSourceIDs: Set<UUID> = []
 }
 

@@ -486,10 +486,11 @@ final class AutoCheckAndReviewTests: XCTestCase {
             newEnd: makeDate(hour: 11), syncKey: "prior")
         let fingerprint = computeFingerprint(for: [old])
         let record = IgnoredAutoReview(fingerprint: fingerprint, ignoredAt: Date(), items: [old])
-        XCTAssertTrue(shouldSuppressIgnoredReview(fingerprint: fingerprint, records: [record]))
-        XCTAssertFalse(shouldSuppressIgnoredReview(fingerprint: fingerprint, records: [record],
-            forceFingerprint: fingerprint))
-        XCTAssertFalse(shouldSuppressIgnoredReview(fingerprint: "new-proposal", records: [record]))
+        XCTAssertTrue(pendingAutoReviewItems(from: [old], ignoredRecords: [record]).isEmpty)
+        XCTAssertEqual(pendingAutoReviewItems(from: [old], ignoredRecords: [record],
+            forceSyncKey: old.syncKey), [old])
+        XCTAssertEqual(pendingAutoReviewItems(from: [old], ignoredRecords: [],
+            forceSyncKey: old.syncKey), [old])
     }
 
     func testCachedExtractionStillReportsCalendarComparisonTiming() async throws {
@@ -510,5 +511,161 @@ final class AutoCheckAndReviewTests: XCTestCase {
         XCTAssertTrue(preview.outputText.contains("calendar compare/write"))
         XCTAssertTrue(preview.outputText.contains("Timing overall:"))
         XCTAssertFalse(preview.outputText.contains("Stages:"))
+    }
+
+    func testLegacyBatchMigrationDeduplicatesMovedCalendarBooking() {
+        let academic = AutoReviewChangeItem(
+            sourceName: "zqh", calendarName: "Academic", status: "would create",
+            title: "ZQH", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 29, hour: 8), newEnd: makeDate(day: 29, hour: 20),
+            syncKey: "zqh"
+        )
+        var experiment = academic
+        experiment.calendarName = "Experiment"
+        let other = AutoReviewChangeItem(
+            sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "Other", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 21, hour: 9), newEnd: makeDate(day: 21, hour: 10),
+            syncKey: "other"
+        )
+        let older = IgnoredAutoReview(
+            fingerprint: autoReviewFingerprint(for: [academic, other]),
+            ignoredAt: Date(timeIntervalSince1970: 100), items: [academic, other]
+        )
+        let newer = IgnoredAutoReview(
+            fingerprint: autoReviewFingerprint(for: [experiment, other]),
+            ignoredAt: Date(timeIntervalSince1970: 200), items: [experiment, other]
+        )
+        let migrated = normalizedIgnoredReviews([newer, older])
+        XCTAssertEqual(migrated.count, 2)
+        XCTAssertTrue(migrated.allSatisfy { $0.items.count == 1 })
+        XCTAssertEqual(migrated.first { $0.id == "zqh" }?.items.first?.calendarName, "Experiment")
+        XCTAssertTrue(pendingAutoReviewItems(from: [experiment, other], ignoredRecords: migrated).isEmpty)
+    }
+
+    func testNewCalendarChangeOnlyRepromptsTheModifiedBooking() {
+        let academic = AutoReviewChangeItem(
+            sourceName: "zqh", calendarName: "Academic", status: "would create",
+            title: "ZQH", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 29, hour: 8), newEnd: makeDate(day: 29, hour: 20),
+            syncKey: "zqh"
+        )
+        var experiment = academic
+        experiment.calendarName = "Experiment"
+        let other = AutoReviewChangeItem(
+            sourceName: "ppms", calendarName: "Experiment", status: "would create",
+            title: "Other", oldStart: nil, oldEnd: nil,
+            newStart: makeDate(day: 21, hour: 9), newEnd: makeDate(day: 21, hour: 10),
+            syncKey: "other"
+        )
+        let oldIgnore = IgnoredAutoReview(
+            fingerprint: autoReviewItemFingerprint(academic), ignoredAt: Date(timeIntervalSince1970: 100),
+            items: [academic]
+        )
+        let otherIgnore = IgnoredAutoReview(
+            fingerprint: autoReviewItemFingerprint(other), ignoredAt: Date(timeIntervalSince1970: 100),
+            items: [other]
+        )
+        XCTAssertEqual(pendingAutoReviewItems(
+            from: [experiment, other], ignoredRecords: [oldIgnore, otherIgnore]
+        ), [experiment])
+        let newIgnore = IgnoredAutoReview(
+            fingerprint: autoReviewItemFingerprint(experiment), ignoredAt: Date(timeIntervalSince1970: 200),
+            items: [experiment]
+        )
+        let replaced = normalizedIgnoredReviews([newIgnore, oldIgnore, otherIgnore])
+        XCTAssertEqual(replaced.count, 2)
+        XCTAssertEqual(replaced.first { $0.id == "zqh" }?.items.first?.calendarName, "Experiment")
+        XCTAssertTrue(pendingAutoReviewItems(from: [experiment, other], ignoredRecords: replaced).isEmpty)
+        XCTAssertEqual(pendingAutoReviewItems(
+            from: [experiment, other], ignoredRecords: replaced, forceSyncKey: "zqh"
+        ), [experiment])
+    }
+
+    func testAcceptOnlyWritesVisibleUnignoredBooking() async throws {
+        let fixture = makeAutoReviewSyncFixture()
+        let first = fixture.extraction.filteredEvents[0]
+        let second = ReservationEvent(
+            syncKey: "ignored", legacySyncKey: nil, sourceID: fixture.source.id.uuidString,
+            sourceName: "Ignored", sourceLink: "", bookingID: "LJZ",
+            calendarName: "Experiment", start: makeDate(day: 22, hour: 9),
+            end: makeDate(day: 22, hour: 10), isAllDay: false,
+            sheetNames: ["Sheet1"], cellReferences: ["B1"]
+        )
+        let extraction = ExtractionResult(
+            allEvents: [first, second], filteredEvents: [first, second],
+            filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false
+        )
+        let cache = [fixture.source.id: extraction]
+        let preview = try await fixture.engine.sync(
+            sources: [fixture.source], workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false, previewOnly: true, parserMode: .rulesOnly,
+            aiConfiguration: nil, aiApprovals: [], schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cache
+        )
+        let all = buildAutoReviewItems(from: preview.reports, existingState: fixture.state.loadState())
+        XCTAssertEqual(all.count, 2)
+        let ignored = try XCTUnwrap(all.first { $0.syncKey == "ignored" })
+        let suppressed = IgnoredAutoReview(
+            fingerprint: autoReviewItemFingerprint(ignored), ignoredAt: Date(), items: [ignored]
+        )
+        XCTAssertEqual(pendingAutoReviewItems(from: all, ignoredRecords: [suppressed]).count, 1)
+        _ = try await fixture.engine.sync(
+            sources: [fixture.source], workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false, previewOnly: false, parserMode: .rulesOnly,
+            aiConfiguration: nil, aiApprovals: [], schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: cache, expectedAutoReviewItems: all,
+            approvedAutoReviewSyncKeys: ["approved-booking"]
+        )
+        XCTAssertEqual(fixture.calendar.storedEvents.count, 1)
+        XCTAssertNotNil(fixture.state.loadState().events["approved-booking"])
+        XCTAssertNil(fixture.state.loadState().events["ignored"])
+    }
+
+    func testAcceptDoesNotDeleteOtherIgnoredBooking() async throws {
+        let fixture = makeAutoReviewSyncFixture()
+        let first = fixture.extraction.filteredEvents[0]
+        let stale = ReservationEvent(
+            syncKey: "keep-ignored", legacySyncKey: nil, sourceID: fixture.source.id.uuidString,
+            sourceName: "Tracked", sourceLink: "", bookingID: "LJZ",
+            calendarName: "Experiment", start: makeDate(day: 23, hour: 9),
+            end: makeDate(day: 23, hour: 10), isAllDay: false,
+            sheetNames: ["Sheet1"], cellReferences: ["C1"]
+        )
+        let original = ExtractionResult(
+            allEvents: [first, stale], filteredEvents: [first, stale],
+            filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false
+        )
+        _ = try await fixture.engine.sync(
+            sources: [fixture.source], workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false, previewOnly: false, parserMode: .rulesOnly,
+            aiConfiguration: nil, aiApprovals: [], schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: [fixture.source.id: original]
+        )
+        XCTAssertEqual(fixture.calendar.storedEvents.count, 2)
+        var changed = first
+        changed.start = first.start.addingTimeInterval(3600)
+        changed.end = first.end.addingTimeInterval(3600)
+        let remaining = ExtractionResult(
+            allEvents: [changed], filteredEvents: [changed],
+            filteredPastCount: 0, parserLabel: "Rule", parserNotes: [], reviewRequired: false
+        )
+        let preview = try await fixture.engine.sync(
+            sources: [fixture.source], workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false, previewOnly: true, parserMode: .rulesOnly,
+            aiConfiguration: nil, aiApprovals: [], schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: [fixture.source.id: remaining]
+        )
+        let all = buildAutoReviewItems(from: preview.reports, existingState: fixture.state.loadState())
+        XCTAssertEqual(Set(all.map(\.status)), Set(["would update", "would delete"]))
+        _ = try await fixture.engine.sync(
+            sources: [fixture.source], workdayHours: WorkdayHours(start: "08:00", end: "18:00"),
+            upcomingOnly: false, previewOnly: false, parserMode: .rulesOnly,
+            aiConfiguration: nil, aiApprovals: [], schedulingTimeZoneIdentifier: "Asia/Singapore",
+            cachedExtractions: [fixture.source.id: remaining],
+            expectedAutoReviewItems: all, approvedAutoReviewSyncKeys: ["approved-booking"]
+        )
+        XCTAssertEqual(fixture.calendar.storedEvents.count, 2)
+        XCTAssertNotNil(fixture.state.loadState().events["keep-ignored"])
     }
 }

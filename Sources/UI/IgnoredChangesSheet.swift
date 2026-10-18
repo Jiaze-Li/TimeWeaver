@@ -31,7 +31,7 @@ struct IgnoredChangesSheet: View {
                         ForEach(model.ignoredReviews) { record in
                             VStack(alignment: .leading, spacing: 8) {
                                 HStack {
-                                    Text("\(record.items.count) ignored changes").font(.headline)
+                                    Text(record.items.first?.sourceName ?? "Ignored booking").font(.headline)
                                     Text(record.ignoredAt, style: .date)
                                         .font(.caption).foregroundStyle(.secondary)
                                     Spacer()

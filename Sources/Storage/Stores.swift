@@ -208,7 +208,9 @@ final class SettingsStore {
               let records = try? JSONDecoder().decode([IgnoredAutoReview].self, from: data) else {
             return []
         }
-        return records
+        let normalized = normalizedIgnoredReviews(records)
+        if normalized != records { saveIgnoredReviews(normalized) }
+        return normalized
     }
 
     static func saveIgnoredReviews(_ records: [IgnoredAutoReview]) {

@@ -14,10 +14,18 @@ extension CalendarSyncEngine {
         eventOverrides: [String: EventOverride] = [:],
         cachedExtractions: [UUID: ExtractionResult] = [:],
         authorizedDeletionSourceIDs: Set<UUID> = [],
-        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil
+        expectedAutoReviewItems: [AutoReviewChangeItem]? = nil,
+        approvedAutoReviewSyncKeys: Set<String>? = nil
     ) async throws -> SyncRunResult {
         let syncStart = ProcessInfo.processInfo.systemUptime
         try await ensureAccess()
+        if let approvedAutoReviewSyncKeys {
+            guard !previewOnly, let expectedAutoReviewItems,
+                  !approvedAutoReviewSyncKeys.isEmpty,
+                  approvedAutoReviewSyncKeys.isSubset(of: Set(expectedAutoReviewItems.map(\.syncKey))) else {
+                throw AppFailure.syncFailed("Invalid approved booking selection. No changes were applied.")
+            }
+        }
 
         // Auto-review approval authorizes only the changes the user actually saw.
         // Verify every proposed mutation before the first calendar write.
@@ -84,7 +92,8 @@ extension CalendarSyncEngine {
                     previewOnly: previewOnly,
                     aiApprovals: aiApprovals,
                     eventOverrides: eventOverrides,
-                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs
+                    authorizedDeletionSourceIDs: authorizedDeletionSourceIDs,
+                    approvedAutoReviewSyncKeys: approvedAutoReviewSyncKeys
                 )
                 let calendarSeconds = ProcessInfo.processInfo.systemUptime - calendarStart
                 let sourceSeconds = ProcessInfo.processInfo.systemUptime - sourceStart
